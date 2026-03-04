@@ -185,10 +185,17 @@
     function logChat(t){ const d=document.createElement('div'); d.textContent=t; chatLog.appendChild(d); chatLog.scrollTop = chatLog.scrollHeight; }
     function sendAll(msg, except=null){ for(const c of conns){ if(c.open && c!==except) c.send(msg); } }
 
+    function colorFromId(id){
+      let h=0; for(let i=0;i<id.length;i++) h = (h*31 + id.charCodeAt(i)) >>> 0;
+      const hue = h % 360;
+      return new THREE.Color(`hsl(${hue} 70% 52%)`);
+    }
+
     function ensureRemote(id,name='guest'){
       if(remotes.has(id)) return remotes.get(id);
       const g = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color:0x15b097})); body.position.y=0.95;
+      const bodyColor = colorFromId(id);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color:bodyColor})); body.position.y=0.95;
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xe7c29f})); head.position.y=1.8;
       g.add(body, head); g.userData.name = name;
       scene.add(g); remotes.set(id,g); return g;
