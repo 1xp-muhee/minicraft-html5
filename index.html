@@ -30,6 +30,7 @@
     <div id="controlsText">WASD 이동 / Space 점프 / Shift 달리기</div>
     <div id="lookText">마우스 시점 / 좌클릭 <span class="danger">직원 때리기</span></div>
     <div>점수: <span id="score">0</span> | 직원 수: <span id="alive">0</span></div>
+    <div>무기: <span id="weaponName">-</span> | 사거리: <span id="weaponRange">-</span></div>
     <div>멀티룸: <span id="roomId"></span> (<span id="netState">오프라인</span>)</div>
   </div>
   <div id="cross">+</div>
@@ -53,6 +54,18 @@
     const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
     const roomId = new URLSearchParams(location.search).get('room') || 'office-1';
     const nick = new URLSearchParams(location.search).get('nick') || `user-${Math.floor(Math.random()*999)}`;
+
+    function hashString(s){ let h=2166136261>>>0; for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619);} return h>>>0; }
+    const weaponCatalog = [
+      { name:'짧은 채찍', len:0.8, color:0x7a5230 },
+      { name:'경봉', len:1.0, color:0x333333 },
+      { name:'롱 채찍', len:1.4, color:0x5b3d27 },
+      { name:'파이프', len:1.2, color:0x6a7078 },
+      { name:'케이블 채찍', len:1.6, color:0x3a2a1d }
+    ];
+    function pickWeapon(seed){ return weaponCatalog[hashString(seed) % weaponCatalog.length]; }
+    const localWeapon = pickWeapon(`${roomId}:${nick}`);
+    const localWeaponRange = +(localWeapon.len * 5).toFixed(1);
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xcdd7e1);
@@ -125,9 +138,11 @@
     whipHandle.rotation.z = Math.PI/2;
     whipRoot.add(whipHandle);
     const whipSegments = [];
-    for(let i=0;i<7;i++){
-      const seg = new THREE.Mesh(new THREE.CylinderGeometry(0.015,0.012,0.2,6), new THREE.MeshStandardMaterial({color: i%2?0x2a2018:0x3a2a1d}));
-      seg.position.x = 0.16 + i*0.17;
+    const segCount = Math.max(4, Math.round(localWeapon.len / 0.2));
+    const segLen = localWeapon.len / segCount;
+    for(let i=0;i<segCount;i++){
+      const seg = new THREE.Mesh(new THREE.CylinderGeometry(0.015,0.012,segLen,6), new THREE.MeshStandardMaterial({color: localWeapon.color}));
+      seg.position.x = 0.16 + i*(segLen*0.85);
       seg.rotation.z = Math.PI/2;
       whipRoot.add(seg);
       whipSegments.push(seg);
@@ -165,6 +180,8 @@
 
     const scoreEl = document.getElementById('score');
     const aliveEl = document.getElementById('alive');
+    document.getElementById('weaponName').textContent = localWeapon.name;
+    document.getElementById('weaponRange').textContent = `${localWeaponRange}m`;
     document.getElementById('roomId').textContent = roomId;
     let score = 0;
     const npcById = new Map();
@@ -236,7 +253,11 @@
       const bodyColor = colorFromId(id);
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color:bodyColor})); body.position.y=0.95;
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xe7c29f})); head.position.y=1.8;
-      g.add(body, head); g.userData.name = name;
+      const remoteWeapon = pickWeapon(id);
+      const wep = new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,remoteWeapon.len,8), new THREE.MeshStandardMaterial({color:remoteWeapon.color}));
+      wep.position.set(0.45,1.1,0.08);
+      wep.rotation.z = -0.9;
+      g.add(body, head, wep); g.userData.name = name;
       const tag = makeNameTag(name);
       g.add(tag);
       g.userData.tag = tag;
@@ -328,7 +349,7 @@
       raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
       const alive = npcs.filter(n=>!n.userData.dead);
       const hits = raycaster.intersectObjects(alive, true);
-      if(!hits.length || hits[0].distance>4) return;
+      if(!hits.length || hits[0].distance>localWeaponRange) return;
       const target = hits[0].object.parent;
       applyNpcHit(target.userData.id, nick);
       sendAll({type:'hitNpc', id:target.userData.id, by:nick});
