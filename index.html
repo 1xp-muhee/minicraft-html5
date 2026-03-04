@@ -270,8 +270,8 @@
         const mag = Math.hypot(sx,sz) || 1;
         sx /= mag; sz /= mag;
 
-        const forward = new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));
-        const right = new THREE.Vector3(forward.z,0,-forward.x);
+        const forward = new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
+        const right = new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
         const moveVec = new THREE.Vector3();
         moveVec.addScaledVector(forward, sz * speed * dt);
         moveVec.addScaledVector(right, sx * speed * dt);
