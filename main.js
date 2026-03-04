@@ -169,10 +169,27 @@ import { createAmbientBgmStarter } from './audio.js';
       const g = new THREE.Group();
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color:0x4f79d8})); body.position.y = 0.8;
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xf0c7a4})); head.position.y = 1.55;
+
+      // random hair
+      const hairMat = new THREE.MeshStandardMaterial({color:[0x111111,0x3c2a1e,0x7a5230,0xb08968][Math.floor(Math.random()*4)]});
+      const hairType = Math.floor(Math.random()*3);
+      let hair;
+      if(hairType===0){
+        hair = new THREE.Mesh(new THREE.BoxGeometry(0.58,0.18,0.58), hairMat);
+        hair.position.y = 1.84;
+      } else if(hairType===1){
+        hair = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 10), hairMat);
+        hair.position.y = 1.88;
+        hair.scale.set(1.05,0.7,1.05);
+      } else {
+        hair = new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.28,0.22,9), hairMat);
+        hair.position.y = 1.86;
+      }
+
       const legMat = new THREE.MeshStandardMaterial({color:0x2f3740});
       const lLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.65,0.22), legMat); lLeg.position.set(-0.16,0.22,0);
       const rLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.65,0.22), legMat); rLeg.position.set(0.16,0.22,0);
-      g.add(body, head, lLeg, rLeg); g.position.set(x,0,z);
+      g.add(body, head, hair, lLeg, rLeg); g.position.set(x,0,z);
       const seat = opts.seat || deskSeats[Math.floor(Math.random()*deskSeats.length)] || {x, z};
       g.userData = {
         id, hp:3,
@@ -235,11 +252,11 @@ import { createAmbientBgmStarter } from './audio.js';
       return true;
     }
     let npcSeq = 0;
-    const initialCount = Math.min(18, deskSeats.length);
+    const initialCount = 50;
     for(let i=0;i<initialCount;i++){
-      const seat = deskSeats[i];
+      const seat = deskSeats[i % Math.max(1, deskSeats.length)] || {x:(Math.random()*60)-30, z:(Math.random()*60)-30};
       const id=`n${npcSeq++}`;
-      makeNPC(seat.x, seat.z, id, { seat, seated:true, entering:false });
+      makeNPC(seat.x + (Math.random()-0.5)*0.4, seat.z + (Math.random()-0.5)*0.4, id, { seat, seated:true, entering:false });
       npcById.set(id,npcs[npcs.length-1]);
     }
     updateAlive();
@@ -256,7 +273,7 @@ import { createAmbientBgmStarter } from './audio.js';
       updateAlive();
     }
 
-    let spawnTimer = 7;
+    let spawnTimer = 5;
 
     // net
     const netEl = document.getElementById('netState');
@@ -650,7 +667,7 @@ import { createAmbientBgmStarter } from './audio.js';
 
       spawnTimer -= dt;
       if(spawnTimer <= 0){
-        spawnTimer = 7;
+        spawnTimer = 5;
         spawnFromRandomDoor();
       }
 
