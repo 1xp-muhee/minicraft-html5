@@ -489,6 +489,12 @@
           if(killed && msg.by) awardScore(msg.by, 100);
           if(isHost) sendAll(msg, conn);
         }
+        if(msg?.type==='cast'){
+          const p = new THREE.Vector3(msg.p?.x||0, msg.p?.y||0, msg.p?.z||0);
+          const d = new THREE.Vector3(msg.d?.x||0, msg.d?.y||0, msg.d?.z||-1).normalize();
+          spawnProjectile(p, d, msg.weapon || 'slingshot', !!msg.ult, true);
+          if(isHost) sendAll(msg, conn);
+        }
         if(msg?.type==='chat'){ logChat(`${msg.nick}: ${msg.text}`); if(isHost) sendAll(msg, conn); }
       });
       conn.on('close', ()=>{ const m=remotes.get(conn.peer); if(m){scene.remove(m); remotes.delete(conn.peer);} });
@@ -545,6 +551,40 @@
 
     function clampPlayer(p){ p.x=Math.max(-38,Math.min(38,p.x)); p.z=Math.max(-38,Math.min(38,p.z)); }
 
+    function makeProjectileMesh(weaponKey, ult){
+      let mesh, speed = 28;
+      if(weaponKey==='wand'){
+        mesh = new THREE.Mesh(new THREE.SphereGeometry(ult?0.16:0.08, 12, 12), new THREE.MeshStandardMaterial({color:0xaee7ff, emissive:0x3a7bff, emissiveIntensity:ult?2.5:1.1}));
+        speed = ult ? 44 : 30;
+      } else if(weaponKey==='k2'){
+        mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.012,0.012, ult?0.45:0.2, 8), new THREE.MeshStandardMaterial({color:0xd6b04d}));
+        mesh.rotation.x = Math.PI/2;
+        speed = ult ? 70 : 48;
+      } else if(weaponKey==='crossbow'){
+        mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.01,0.01, ult?0.8:0.45, 8), new THREE.MeshStandardMaterial({color:0x8b5a2b}));
+        mesh.rotation.x = Math.PI/2;
+        speed = ult ? 55 : 34;
+      } else {
+        mesh = new THREE.Mesh(new THREE.SphereGeometry(ult?0.14:0.06, 10, 10), new THREE.MeshStandardMaterial({color:0x7f8c8d}));
+        speed = ult ? 42 : 28;
+      }
+      return {mesh, speed};
+    }
+
+    function spawnProjectile(p, d, weaponKey, ult, noHit=false){
+      const {mesh, speed} = makeProjectileMesh(weaponKey, ult);
+      mesh.position.copy(p).addScaledVector(d, 0.55);
+      mesh.userData.v = d.clone().multiplyScalar(speed);
+      mesh.userData.life = ult ? 6 : 3;
+      mesh.userData.ult = ult;
+      mesh.userData.damage = ult ? 999 : 1;
+      mesh.userData.fxMult = ult ? 20 : 1;
+      mesh.userData.gravity = ult ? 0 : 10;
+      mesh.userData.noHit = noHit;
+      scene.add(mesh);
+      spells.push(mesh);
+    }
+
     function castSpell(){
       punchT = 0.16;
       const ult = ultimateArmed;
@@ -553,32 +593,8 @@
       camera.getWorldDirection(d);
       camera.getWorldPosition(p);
 
-      let mesh, speed = 28;
-      if(localWeapon.key==='wand'){
-        mesh = new THREE.Mesh(new THREE.SphereGeometry(ult?0.16:0.08, 12, 12), new THREE.MeshStandardMaterial({color:0xaee7ff, emissive:0x3a7bff, emissiveIntensity:ult?2.5:1.1}));
-        speed = ult ? 44 : 30;
-      } else if(localWeapon.key==='k2'){
-        mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.012,0.012, ult?0.45:0.2, 8), new THREE.MeshStandardMaterial({color:0xd6b04d}));
-        mesh.rotation.x = Math.PI/2;
-        speed = ult ? 70 : 48;
-      } else if(localWeapon.key==='crossbow'){
-        mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.01,0.01, ult?0.8:0.45, 8), new THREE.MeshStandardMaterial({color:0x8b5a2b}));
-        mesh.rotation.x = Math.PI/2;
-        speed = ult ? 55 : 34;
-      } else {
-        mesh = new THREE.Mesh(new THREE.SphereGeometry(ult?0.14:0.06, 10, 10), new THREE.MeshStandardMaterial({color:0x7f8c8d}));
-        speed = ult ? 42 : 28;
-      }
-
-      mesh.position.copy(p).addScaledVector(d, 0.55);
-      mesh.userData.v = d.clone().multiplyScalar(speed);
-      mesh.userData.life = ult ? 6 : 3;
-      mesh.userData.ult = ult;
-      mesh.userData.damage = ult ? 999 : 1;
-      mesh.userData.fxMult = ult ? 20 : 1;
-      mesh.userData.gravity = ult ? 0 : 10;
-      scene.add(mesh);
-      spells.push(mesh);
+      spawnProjectile(p, d, localWeapon.key, ult, false);
+      sendAll({type:'cast', from: peer?.id || nick, p:{x:p.x,y:p.y,z:p.z}, d:{x:d.x,y:d.y,z:d.z}, weapon: localWeapon.key, ult});
 
       if(ult){ ultimateArmed = false; ultimateReady = false; chiHits = 0; updateChiUI(); }
     }
@@ -718,19 +734,21 @@
         b.userData.v.y -= (b.userData.gravity||0)*dt;
 
         let hit = false;
-        for(const n of npcs){
-          if(n.userData.dead) continue;
-          const hitPos = n.position.clone().add(new THREE.Vector3(0,1.1,0));
-          if(b.position.distanceTo(hitPos) < 0.65){
-            if(n.userData.seated && !b.userData.ult){ awardScore(nick, -80); }
-            else {
-              const killed = applyNpcHit(n.userData.id, nick, b.userData.damage||1, b.userData.fxMult||1);
-              if(killed) awardScore(nick, 100);
-              if(!b.userData.ult) addChi(1);
-              sendAll({type:'hitNpc', id:n.userData.id, by:nick, damage:b.userData.damage||1, fxMult:b.userData.fxMult||1});
+        if(!b.userData.noHit){
+          for(const n of npcs){
+            if(n.userData.dead) continue;
+            const hitPos = n.position.clone().add(new THREE.Vector3(0,1.1,0));
+            if(b.position.distanceTo(hitPos) < 0.65){
+              if(n.userData.seated && !b.userData.ult){ awardScore(nick, -80); }
+              else {
+                const killed = applyNpcHit(n.userData.id, nick, b.userData.damage||1, b.userData.fxMult||1);
+                if(killed) awardScore(nick, 100);
+                if(!b.userData.ult) addChi(1);
+                sendAll({type:'hitNpc', id:n.userData.id, by:nick, damage:b.userData.damage||1, fxMult:b.userData.fxMult||1});
+              }
+              hit = true;
+              break;
             }
-            hit = true;
-            break;
           }
         }
 
