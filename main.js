@@ -160,17 +160,18 @@ import { createProjectileMesh } from './projectiles.js';
     buildTeamTower(teamBases.red, 0xb91c1c);
 
     function addTeamTowerStairs(base, dir){
-      // dir: +1 right side outward, -1 left side outward
+      // dir: +1 blue side, -1 red side
       const stairMat2 = new THREE.MeshStandardMaterial({color:0x9aa5b1});
       for(let i=0;i<14;i++){
         const y = 0.2 + i*0.52;
-        const x = base.x + dir*(4.6 + i*0.55);
-        const z = base.z + 3.2;
-        const step = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.42, 2.3), stairMat2);
+        // high steps get closer to tower center (climb toward tower)
+        const x = base.x + dir*(11.8 - i*0.58);
+        const z = base.z;
+        const step = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.42, 2.6), stairMat2);
         step.position.set(x, y, z);
         step.castShadow = true; step.receiveShadow = true;
         scene.add(step);
-        towerSurfaces.push({ minX:x-0.37, maxX:x+0.37, minZ:z-1.15, maxZ:z+1.15, topY:y+0.21 });
+        towerSurfaces.push({ minX:x-0.39, maxX:x+0.39, minZ:z-1.3, maxZ:z+1.3, topY:y+0.21 });
       }
     }
     addTeamTowerStairs(teamBases.blue, +1);
