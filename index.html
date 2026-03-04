@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MiniCraft HTML5</title>
+  <style>
+    html, body { margin:0; width:100%; height:100%; overflow:hidden; background:#87ceeb; font-family:system-ui, sans-serif; }
+    #ui {
+      position: fixed; top: 10px; left: 10px; color: white; z-index: 10;
+      background: rgba(0,0,0,0.35); padding: 10px 12px; border-radius: 10px;
+      backdrop-filter: blur(3px); font-size: 13px; line-height: 1.45;
+    }
+    #crosshair {
+      position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      color: white; font-size: 22px; user-select: none; z-index: 10;
+      text-shadow: 0 0 6px rgba(0,0,0,.8);
+    }
+    #start {
+      position: fixed; inset: 0; display:flex; align-items:center; justify-content:center;
+      background: rgba(0,0,0,.55); color: white; z-index: 20; text-align:center;
+    }
+    #start button { font-size:18px; padding: 14px 20px; border:none; border-radius:10px; cursor:pointer; }
+    .chip { display:inline-block; margin:2px 4px 0 0; padding:2px 8px; border-radius:999px; background:rgba(255,255,255,.18); }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <div><strong>MiniCraft HTML5</strong></div>
+    <div>WASD 이동 / Space 점프 / Shift 달리기</div>
+    <div>마우스: 시점 / 좌클릭: 블록 제거 / 우클릭: 블록 설치</div>
+    <div>숫자키 1~3 블록 선택</div>
+    <div style="margin-top:6px">
+      <span class="chip">1 잔디</span>
+      <span class="chip">2 흙</span>
+      <span class="chip">3 돌</span>
+    </div>
+  </div>
+  <div id="crosshair">+</div>
+  <div id="start"><button id="startBtn">클릭해서 시작</button></div>
+
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+    import { PointerLockControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/PointerLockControls.js';
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87ceeb);
+    scene.fog = new THREE.Fog(0x87ceeb, 20, 90);
+
+    const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 200);
+    camera.position.set(0, 4, 8);
+
+    const renderer = new THREE.WebGLRenderer({ antialias:true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(devicePixelRatio);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x667788, 0.8);
+    scene.add(hemi);
+
+    const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+    sun.position.set(20, 40, 10);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048,2048);
+    scene.add(sun);
+
+    const controls = new PointerLockControls(camera, document.body);
+    scene.add(controls.getObject());
+
+    const start = document.getElementById('start');
+    document.getElementById('startBtn').onclick = () => controls.lock();
+    controls.addEventListener('lock', () => start.style.display='none');
+    controls.addEventListener('unlock', () => start.style.display='flex');
+
+    const blockSize = 1;
+    const world = new Map();
+    const blocks = [];
+    const group = new THREE.Group();
+    scene.add(group);
+
+    const boxGeo = new THREE.BoxGeometry(blockSize, blockSize, blockSize);
+    const matGrass = new THREE.MeshStandardMaterial({ color: 0x49b14a });
+    const matDirt  = new THREE.MeshStandardMaterial({ color: 0x8b5a2b });
+    const matStone = new THREE.MeshStandardMaterial({ color: 0x8a8f98 });
+    const mats = [matGrass, matDirt, matStone];
+    let selected = 0;
+
+    const key = (x,y,z)=>`${x}|${y}|${z}`;
+    const snap = (v)=>Math.round(v / blockSize) * blockSize;
+
+    function addBlock(x,y,z,type=0){
+      const k = key(x,y,z);
+      if(world.has(k)) return;
+      const m = new THREE.Mesh(boxGeo, mats[type] || mats[0]);
+      m.position.set(x,y,z);
+      m.castShadow = true;
+      m.receiveShadow = true;
+      m.userData = {x,y,z,type};
+      world.set(k, m);
+      blocks.push(m);
+      group.add(m);
+    }
+
+    function removeBlock(mesh){
+      const {x,y,z} = mesh.userData;
+      world.delete(key(x,y,z));
+      const i = blocks.indexOf(mesh);
+      if(i>=0) blocks.splice(i,1);
+      group.remove(mesh);
+    }
+
+    // Flat terrain + small hill
+    for(let x=-25; x<=25; x++){
+      for(let z=-25; z<=25; z++){
+        addBlock(x,0,z,0);
+        if ((x*x + z*z) < 50 && Math.random() > 0.6) addBlock(x,1,z,1);
+      }
+    }
+
+    const raycaster = new THREE.Raycaster();
+
+    function getLookHit(){
+      raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+      const hits = raycaster.intersectObjects(blocks, false);
+      return hits[0] || null;
+    }
+
+    window.addEventListener('contextmenu', (e)=>e.preventDefault());
+    window.addEventListener('mousedown', (e)=>{
+      if(!controls.isLocked) return;
+      const hit = getLookHit();
+      if(!hit) return;
+
+      if(e.button === 0){
+        // remove
+        if(hit.object.userData.y <= 0) return; // keep ground base
+        removeBlock(hit.object);
+      } else if(e.button === 2){
+        // place adjacent block
+        const p = hit.point.clone().add(hit.face.normal.clone().multiplyScalar(0.5));
+        const x = snap(p.x), y = snap(p.y), z = snap(p.z);
+        const playerPos = controls.getObject().position;
+        if(Math.abs(playerPos.x-x)<0.8 && Math.abs(playerPos.y-y)<1.8 && Math.abs(playerPos.z-z)<0.8) return;
+        addBlock(x,y,z,selected);
+      }
+    });
+
+    window.addEventListener('keydown', (e)=>{
+      if(e.code==='Digit1') selected = 0;
+      if(e.code==='Digit2') selected = 1;
+      if(e.code==='Digit3') selected = 2;
+    });
+
+    // Simple FPS-like movement + gravity
+    const velocity = new THREE.Vector3();
+    const direction = new THREE.Vector3();
+    const move = {f:false,b:false,l:false,r:false,jump:false,run:false};
+    let canJump = false;
+
+    const onKey = (d, e)=>{
+      switch(e.code){
+        case 'KeyW': move.f = d; break;
+        case 'KeyS': move.b = d; break;
+        case 'KeyA': move.l = d; break;
+        case 'KeyD': move.r = d; break;
+        case 'ShiftLeft': move.run = d; break;
+        case 'Space':
+          if(d && canJump){ velocity.y = 7.5; canJump = false; }
+          break;
+      }
+    };
+    addEventListener('keydown', (e)=>onKey(true,e));
+    addEventListener('keyup', (e)=>onKey(false,e));
+
+    function groundHeightAt(x,z){
+      // crude collision: find highest block center + 0.5 near position
+      const sx = snap(x), sz = snap(z);
+      for(let y=20; y>=-5; y--){
+        if(world.has(key(sx,y,sz))) return y + 1.5;
+      }
+      return -100;
+    }
+
+    let prev = performance.now();
+    function animate(){
+      requestAnimationFrame(animate);
+      const now = performance.now();
+      const dt = Math.min((now - prev)/1000, 0.05);
+      prev = now;
+
+      if(controls.isLocked){
+        const speed = move.run ? 9.5 : 6.0;
+        direction.set(0,0,0);
+        if(move.f) direction.z -= 1;
+        if(move.b) direction.z += 1;
+        if(move.l) direction.x -= 1;
+        if(move.r) direction.x += 1;
+        direction.normalize();
+
+        velocity.x = direction.x * speed;
+        velocity.z = direction.z * speed;
+        velocity.y -= 18 * dt; // gravity
+
+        controls.moveRight(velocity.x * dt);
+        controls.moveForward(-velocity.z * dt);
+        controls.getObject().position.y += velocity.y * dt;
+
+        const p = controls.getObject().position;
+        const floor = groundHeightAt(p.x, p.z);
+        if(p.y < floor){
+          p.y = floor;
+          velocity.y = 0;
+          canJump = true;
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    addEventListener('resize', ()=>{
+      camera.aspect = innerWidth/innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+</html>
