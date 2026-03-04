@@ -329,8 +329,8 @@ import { createProjectileMesh } from './projectiles.js';
       const ePR = new THREE.Mesh(new THREE.SphereGeometry(0.022,8,8), pupilMat); ePR.position.set(0.11,1.58,-0.305);
 
       const legMat = new THREE.MeshStandardMaterial({color:0x2f3740});
-      const lLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.65,0.22), legMat); lLeg.position.set(-0.16,0.22,0);
-      const rLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.65,0.22), legMat); rLeg.position.set(0.16,0.22,0);
+      const lLeg = new THREE.Mesh(new THREE.BoxGeometry(0.16,0.66,0.16), legMat); lLeg.position.set(-0.11,0.22,0);
+      const rLeg = new THREE.Mesh(new THREE.BoxGeometry(0.16,0.66,0.16), legMat); rLeg.position.set(0.11,0.22,0);
       let keyboard = null;
       if(isBerserk){
         keyboard = new THREE.Mesh(new THREE.BoxGeometry(0.34,0.06,0.14), new THREE.MeshStandardMaterial({color:0x4b5563}));
@@ -524,8 +524,8 @@ import { createProjectileMesh } from './projectiles.js';
       const bodyColor = colorFromId(id);
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color:bodyColor})); body.position.y=0.95;
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xe7c29f})); head.position.y=1.8;
-      const lLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.65,0.22), new THREE.MeshStandardMaterial({color:0x2f3740})); lLeg.position.set(-0.16,0.3,0);
-      const rLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.65,0.22), new THREE.MeshStandardMaterial({color:0x2f3740})); rLeg.position.set(0.16,0.3,0);
+      const lLeg = new THREE.Mesh(new THREE.BoxGeometry(0.16,0.66,0.16), new THREE.MeshStandardMaterial({color:0x2f3740})); lLeg.position.set(-0.11,0.3,0);
+      const rLeg = new THREE.Mesh(new THREE.BoxGeometry(0.16,0.66,0.16), new THREE.MeshStandardMaterial({color:0x2f3740})); rLeg.position.set(0.11,0.3,0);
       const remoteWeapon = weaponCatalog.slingshot;
       const wep = new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,remoteWeapon.len,8), new THREE.MeshStandardMaterial({color:remoteWeapon.color}));
       wep.position.set(0.45,1.1,0.08);
