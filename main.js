@@ -361,6 +361,7 @@ import { createProjectileMesh } from './projectiles.js';
         willLeave: Math.random() < 0.30,
         stunned: 0,
         panicReturn: false,
+        seatHitCount: 0,
         stateTimer: 2.0 + Math.random()*2.0,
         moveTimer: 0
       };
@@ -1059,7 +1060,13 @@ import { createProjectileMesh } from './projectiles.js';
             if(b.position.distanceTo(hitPos) < 0.65){
               if(n.userData.seated && !b.userData.ult){
                 awardScore(nick, -80);
-                setAlertText(n.userData.alertTag, '일하는 중입니다.');
+                n.userData.seatHitCount = (n.userData.seatHitCount || 0) + 1;
+                const c = n.userData.seatHitCount;
+                let linePool;
+                if(c <= 1) linePool = ['일하는 중입니다.', '업무 중입니다.'];
+                else if(c <= 3) linePool = ['사장님 왜 이러세요…', '사장님, 제발 그만요.', '진짜 아파요…'];
+                else linePool = ['노동청에 신고할게요…', '사장님 나빠요…', '이건 너무합니다…'];
+                setAlertText(n.userData.alertTag, linePool[Math.floor(Math.random()*linePool.length)]);
                 n.userData.alertTag.visible = true;
                 n.userData.stunned = Math.max(n.userData.stunned || 0, 0.45);
               } else {
