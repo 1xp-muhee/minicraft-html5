@@ -150,25 +150,25 @@
 
     // first-person hand + swing
     const handRoot = new THREE.Group();
-    handRoot.position.set(0.46,-0.42,-0.8);
+    handRoot.position.set(0.2,-0.34,-0.58);
     camera.add(handRoot);
     const hand = new THREE.Mesh(new THREE.BoxGeometry(0.18,0.35,0.18), new THREE.MeshStandardMaterial({color:0xe6b892}));
     hand.rotation.z = -0.25;
     handRoot.add(hand);
 
     const whipRoot = new THREE.Group();
-    whipRoot.position.set(0.06, -0.06, -0.02);
+    whipRoot.position.set(0.02, -0.03, -0.24);
     handRoot.add(whipRoot);
     const whipHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.028,0.03,0.26,8), new THREE.MeshStandardMaterial({color:0x4d3425}));
-    whipHandle.rotation.z = Math.PI/2;
+    whipHandle.rotation.x = Math.PI/2;
     whipRoot.add(whipHandle);
     const whipSegments = [];
     const segCount = Math.max(4, Math.round(localWeapon.len / 0.2));
     const segLen = localWeapon.len / segCount;
     for(let i=0;i<segCount;i++){
       const seg = new THREE.Mesh(new THREE.CylinderGeometry(0.015,0.012,segLen,6), new THREE.MeshStandardMaterial({color: localWeapon.color}));
-      seg.position.x = 0.16 + i*(segLen*0.85);
-      seg.rotation.z = Math.PI/2;
+      seg.position.z = -(0.18 + i*(segLen*0.9));
+      seg.rotation.x = Math.PI/2;
       whipRoot.add(seg);
       whipSegments.push(seg);
     }
@@ -491,8 +491,8 @@
         punchT -= dt;
         const k = Math.max(0, punchT/0.16);
         const swing = (1-k);
-        handRoot.position.x = 0.46 + swing*0.23;
-        handRoot.position.y = -0.42 - swing*0.14;
+        handRoot.position.x = 0.2 + swing*0.1;
+        handRoot.position.y = -0.34 - swing*0.1;
         handRoot.rotation.z = -swing*1.05;
         handRoot.rotation.x = -swing*0.25;
         whipRoot.rotation.y = -swing*1.2;
@@ -503,8 +503,8 @@
           whipSegments[i].rotation.x = Math.cos((1-k)*9 - t*2.8) * (0.25*(1-t));
         }
       } else {
-        handRoot.position.x += (0.46-handRoot.position.x)*0.22;
-        handRoot.position.y += (-0.42-handRoot.position.y)*0.22;
+        handRoot.position.x += (0.2-handRoot.position.x)*0.22;
+        handRoot.position.y += (-0.34-handRoot.position.y)*0.22;
         handRoot.rotation.z += (0-handRoot.rotation.z)*0.22;
         handRoot.rotation.x += (0-handRoot.rotation.x)*0.22;
         whipRoot.rotation.y += (0-whipRoot.rotation.y)*0.2;
