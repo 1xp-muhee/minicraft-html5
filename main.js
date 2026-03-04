@@ -8,11 +8,36 @@ import { createProjectileMesh } from './projectiles.js';
     const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
     const roomId = new URLSearchParams(location.search).get('room') || 'office-1';
     const nick = resolveNickname();
-    const savedTeam = (localStorage.getItem('officecraft_team') || '').toLowerCase();
-    const teamInput = (prompt('팀 선택: blue / red', savedTeam || 'blue') || 'blue').trim().toLowerCase();
-    const team = teamInput.startsWith('r') ? 'red' : 'blue';
-    localStorage.setItem('officecraft_team', team);
 
+    async function resolveTeamSelection(){
+      return new Promise((resolve)=>{
+        const saved = (localStorage.getItem('officecraft_team') || 'blue').toLowerCase();
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.62);display:flex;align-items:center;justify-content:center;';
+        const card = document.createElement('div');
+        card.style.cssText = 'width:min(560px,90vw);background:#111827;color:#fff;border-radius:14px;padding:18px;box-shadow:0 20px 40px rgba(0,0,0,.4);';
+        card.innerHTML = '<div style="font-weight:700;font-size:18px;margin-bottom:12px">팀 선택</div><div style="opacity:.85;margin-bottom:14px">블루/레드 중 하나를 클릭하세요.</div>';
+        const row = document.createElement('div');
+        row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;';
+
+        const mk = (key, label, color)=>{
+          const btn = document.createElement('button');
+          const active = key===saved;
+          btn.style.cssText = `border:1px solid ${active ? '#fff' : '#374151'};background:${color};color:#fff;border-radius:12px;padding:16px;cursor:pointer;font-weight:700;`;
+          btn.textContent = label;
+          btn.onclick = ()=>{ localStorage.setItem('officecraft_team', key); wrap.remove(); resolve(key); };
+          return btn;
+        };
+
+        row.appendChild(mk('blue','블루팀','#1d4ed8'));
+        row.appendChild(mk('red','레드팀','#b91c1c'));
+        card.appendChild(row);
+        wrap.appendChild(card);
+        document.body.appendChild(wrap);
+      });
+    }
+
+    const team = await resolveTeamSelection();
     const localWeapon = await resolveWeaponSelection();
     const localWeaponRange = +(localWeapon.len * 5).toFixed(1);
 
