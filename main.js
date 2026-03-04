@@ -1082,21 +1082,23 @@ import { createProjectileMesh } from './projectiles.js';
           targetPos = h.userData.carrying ? homeBase : enemyBase;
         }
 
-        h.position.y = 0;
-        const hp = h.position.clone(); hp.y = 0;
-        const tp = targetPos.clone(); tp.y = 0;
-        const dir = tp.sub(hp);
+        const hp2 = h.position.clone(); hp2.y = 0;
+        const tp2 = targetPos.clone(); tp2.y = 0;
+        const dir = tp2.sub(hp2);
         const dist = dir.length();
         if(dist > 0.01){
           dir.normalize();
           const spd = h.userData.carrying ? (h.userData.guardSpeed||3.0)*1.25 : (h.userData.guardSpeed||3.0);
           h.position.addScaledVector(dir, Math.min(spd*dt, dist));
-          h.position.y = 0;
           h.rotation.y = Math.atan2(dir.x, dir.z);
         }
+        // allow guards to climb stairs/platforms too
+        const guardSupportY = supportHeightAt(h.position.x, h.position.z, h.position.y || 1.6);
+        h.position.y = Math.max(0, guardSupportY - 1.6);
 
         h.userData.lastAtk += dt;
-        if(target && dist < 2.1 && h.userData.lastAtk > 1.0){
+        const vGap = target ? Math.abs((target.position.y||0) - (h.position.y||0)) : 999;
+        if(target && dist < 2.1 && vGap < 1.4 && h.userData.lastAtk > 1.0){
           h.userData.lastAtk = 0;
           const enemyNick = target.userData?.name;
           if(enemyNick) sendAll({type:'playerHit', targetNick: enemyNick, damage: (h.userData.guardDamage||10), by: nick, fromX: h.position.x, fromZ: h.position.z});
