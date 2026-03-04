@@ -282,8 +282,10 @@ import { createProjectileMesh } from './projectiles.js';
 
     function makeNPC(x,z,id,opts={}){
       const g = new THREE.Group();
+      const isBerserk = opts.isBerserk ?? (Math.random() < 0.20);
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color:0xfacc15})); body.position.y = 0.8;
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xf0c7a4})); head.position.y = 1.55;
+      if(isBerserk) head.scale.setScalar(1.2);
 
       // random hair
       const hairMat = new THREE.MeshStandardMaterial({color:[0x111111,0x3c2a1e,0x7a5230,0xb08968][Math.floor(Math.random()*4)]});
@@ -311,13 +313,25 @@ import { createProjectileMesh } from './projectiles.js';
       const legMat = new THREE.MeshStandardMaterial({color:0x2f3740});
       const lLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.65,0.22), legMat); lLeg.position.set(-0.16,0.22,0);
       const rLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.65,0.22), legMat); rLeg.position.set(0.16,0.22,0);
+      let keyboard = null;
+      if(isBerserk){
+        keyboard = new THREE.Mesh(new THREE.BoxGeometry(0.34,0.06,0.14), new THREE.MeshStandardMaterial({color:0x4b5563}));
+        keyboard.position.set(0.36,0.9,-0.05);
+        keyboard.rotation.z = -0.6;
+      }
       const alertTag = makeAlertTag();
-      g.add(body, head, hair, eWL, eWR, ePL, ePR, lLeg, rLeg, alertTag); g.position.set(x,0,z);
+      g.add(body, head, hair, eWL, eWR, ePL, ePR, lLeg, rLeg, alertTag);
+      if(keyboard) g.add(keyboard);
+      g.position.set(x,0,z);
       const seat = opts.seat || deskSeats[Math.floor(Math.random()*deskSeats.length)] || {x, z};
       const baseSpeed = 0.9+Math.random()*0.8;
       g.userData = {
-        id, hp:3,
+        id, hp:(isBerserk?4.5:3),
         team:'neutral',
+        isBerserk,
+        enraged:false,
+        keyboard,
+        atkCd:0,
         lLeg, rLeg, eyeL:ePL, eyeR:ePR, alertTag, gait: Math.random()*Math.PI*2,
         speed:baseSpeed, baseSpeed,
         dir:new THREE.Vector3(Math.random()*2-1,0,Math.random()*2-1).normalize(),
@@ -513,6 +527,13 @@ import { createProjectileMesh } from './projectiles.js';
         const line = hitVoices[Math.floor(Math.random()*hitVoices.length)];
         setAlertText(npc.userData.alertTag, line);
         npc.userData.alertTag.visible = true;
+      }
+
+      if(npc.userData.isBerserk){
+        npc.userData.enraged = true;
+        npc.userData.eyeL.material.color.setHex(0xff2d2d);
+        npc.userData.eyeR.material.color.setHex(0xff2d2d);
+        npc.children.forEach(ch=>{ if(ch.geometry?.type==='BoxGeometry' && ch.position.y>1.3) ch.material?.color?.setHex?.(0xf2b2a0); });
       }
 
       if(npc.userData.hp <= 0){
@@ -761,6 +782,46 @@ import { createProjectileMesh } from './projectiles.js';
 
       for(const n of npcs){
         if(n.userData.dead) continue;
+
+        if(n.userData.enraged){
+          // berserk worker: chase and keyboard attack players
+          let targetPos = player.position;
+          let targetNick = nick;
+          let best = n.position.distanceTo(player.position);
+          for(const m of remotes.values()){
+            if(!m?.userData?.name) continue;
+            const d = n.position.distanceTo(m.position);
+            if(d < best){ best = d; targetPos = m.position; targetNick = m.userData.name; }
+          }
+
+          const dir = targetPos.clone().sub(n.position);
+          const dist = dir.length();
+          if(dist > 0.01){
+            dir.normalize();
+            n.position.addScaledVector(dir, Math.min((n.userData.baseSpeed*1.15)*dt, dist));
+            n.rotation.y = Math.atan2(dir.x, dir.z);
+          }
+          n.userData.gait += dt*11;
+          n.userData.lLeg.rotation.x = Math.sin(n.userData.gait)*0.9;
+          n.userData.rLeg.rotation.x = -Math.sin(n.userData.gait)*0.9;
+
+          if(n.userData.keyboard){
+            n.userData.atkCd -= dt;
+            const swing = Math.max(0, (0.25 - Math.max(0,n.userData.atkCd))/0.25);
+            n.userData.keyboard.rotation.z = -0.6 - Math.sin(swing*Math.PI)*0.9;
+            if(dist < 1.9 && n.userData.atkCd <= 0){
+              n.userData.atkCd = 1.1;
+              const dmg = 6 + Math.floor(Math.random()*7); // 6~12
+              if(targetNick===nick){
+                playerHp = Math.max(0, playerHp - dmg);
+                hpEl.textContent = playerHp;
+              } else {
+                sendAll({type:'playerHit', targetNick, damage:dmg, by:'berserk', fromX:n.position.x, fromZ:n.position.z});
+              }
+            }
+          }
+          continue;
+        }
 
         if(n.userData.stunned > 0){
           n.userData.stunned -= dt;
