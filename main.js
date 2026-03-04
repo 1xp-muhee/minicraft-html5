@@ -488,6 +488,10 @@ import { createProjectileMesh } from './projectiles.js';
 
     function netState(t){ netEl.textContent = t; }
     function logChat(t){ const d=document.createElement('div'); d.textContent=t; chatLog.appendChild(d); chatLog.scrollTop = chatLog.scrollHeight; }
+    function showStatus(text){
+      netEl.textContent = text;
+      setTimeout(()=>{ if(netEl.textContent===text) netEl.textContent = isHost ? '호스트 온라인' : '참가 완료'; }, 1400);
+    }
     function sendAll(msg, except=null){ for(const c of conns){ if(c.open && c!==except) c.send(msg); } }
     function isTyping(){ return document.activeElement === chatInput; }
     function openChat(){
@@ -730,8 +734,8 @@ import { createProjectileMesh } from './projectiles.js';
 
     function clampPlayer(p){ p.x=Math.max(-38,Math.min(38,p.x)); p.z=Math.max(-38,Math.min(38,p.z)); }
     function hireNpcGuard(){
-      if(score < 300){ logChat('고용 실패: 점수 부족(300 필요)'); return false; }
-      // recruit nearest neutral(yellow) worker
+      if(score < 300){ showStatus('고용 실패: 점수 부족'); return false; }
+      // recruit nearest neutral(yellow) worker (global nearest)
       let best = null; let bestD = 9999;
       for(const n of npcs){
         if(n.userData.dead) continue;
@@ -739,7 +743,7 @@ import { createProjectileMesh } from './projectiles.js';
         const d = n.position.distanceTo(player.position);
         if(d < bestD){ bestD = d; best = n; }
       }
-      if(!best || bestD > 12){ logChat('고용 실패: 근처에 고용 가능한 직원 없음'); return false; }
+      if(!best){ showStatus('고용 실패: 직원 없음'); return false; }
 
       awardScore(nick, -300);
 
@@ -760,7 +764,7 @@ import { createProjectileMesh } from './projectiles.js';
       hiredNpcs.push(best);
       sendAll({type:'guardSpawn', guardId: best.userData.guardId, team, x: best.position.x, z: best.position.z});
       updateAlive();
-      logChat('고용 성공: 아군 가드 합류');
+      showStatus('고용 성공: 아군 가드 합류');
       return true;
     }
     function supportHeightAt(x, z, currentY){
@@ -808,7 +812,14 @@ import { createProjectileMesh } from './projectiles.js';
     document.getElementById('jumpBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); if(controlEnabled) move.jump=true; }, {passive:false});
     document.getElementById('ultBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); if(controlEnabled) consumeUltimate(); }, {passive:false});
     const hireBtn = document.getElementById('hireBtn');
-    const onHirePress = (e)=>{ e.preventDefault(); e.stopPropagation(); if(controlEnabled) hireNpcGuard(); };
+    let lastHirePress = 0;
+    const onHirePress = (e)=>{
+      e.preventDefault(); e.stopPropagation();
+      const now = Date.now();
+      if(now - lastHirePress < 250) return; // prevent duplicated touch/click firing
+      lastHirePress = now;
+      if(controlEnabled) hireNpcGuard();
+    };
     hireBtn.addEventListener('touchstart', onHirePress, {passive:false});
     hireBtn.addEventListener('pointerdown', onHirePress, {passive:false});
     hireBtn.addEventListener('click', onHirePress, {passive:false});
