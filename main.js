@@ -493,6 +493,12 @@ import { createProjectileMesh } from './projectiles.js';
       setTimeout(()=>{ if(netEl.textContent===text) netEl.textContent = isHost ? '호스트 온라인' : '참가 완료'; }, 1400);
     }
     function sendAll(msg, except=null){ for(const c of conns){ if(c.open && c!==except) c.send(msg); } }
+    function upsertRemoteGuard(msg){
+      const g = ensureRemoteGuard(msg.guardId, msg.team || 'blue');
+      g.position.set(msg.x||0, 0, msg.z||0);
+      g.rotation.y = msg.ry || 0;
+      return g;
+    }
     function isTyping(){ return document.activeElement === chatInput; }
     function openChat(){
       if(document.pointerLockElement===document.body) document.exitPointerLock?.();
@@ -667,14 +673,16 @@ import { createProjectileMesh } from './projectiles.js';
           if(isHost) sendAll(msg, conn);
         }
         if(msg?.type==='guardSpawn'){
-          const g = ensureRemoteGuard(msg.guardId, msg.team || 'blue');
-          g.position.set(msg.x||0, 0, msg.z||0);
+          upsertRemoteGuard(msg);
           if(isHost) sendAll(msg, conn);
         }
         if(msg?.type==='guardState'){
-          const g = ensureRemoteGuard(msg.guardId, msg.team || 'blue');
-          g.position.set(msg.x||0, 0, msg.z||0);
-          g.rotation.y = msg.ry || 0;
+          upsertRemoteGuard(msg);
+          if(isHost) sendAll(msg, conn);
+        }
+        if(msg?.type==='guardsSnapshot'){
+          const list = Array.isArray(msg.guards) ? msg.guards : [];
+          for(const g of list){ upsertRemoteGuard(g); }
           if(isHost) sendAll(msg, conn);
         }
         if(msg?.type==='chat'){ logChat(`${msg.nick}: ${msg.text}`); if(isHost) sendAll(msg, conn); }
@@ -1188,10 +1196,14 @@ import { createProjectileMesh } from './projectiles.js';
       if(netTick>0.06){
         netTick=0;
         sendAll({type:'state', s:{x:player.position.x,y:player.position.y,z:player.position.z,yaw}, nick, score, team, hp: playerHp});
+        const guards = [];
         for(const h of hiredNpcs){
           if(!h.userData?.guardId) continue;
-          sendAll({type:'guardState', guardId:h.userData.guardId, team:h.userData.team, x:h.position.x, z:h.position.z, ry:h.rotation.y});
+          const gmsg = {guardId:h.userData.guardId, team:h.userData.team, x:h.position.x, z:h.position.z, ry:h.rotation.y};
+          guards.push(gmsg);
+          sendAll({type:'guardState', ...gmsg});
         }
+        if(guards.length) sendAll({type:'guardsSnapshot', guards});
       }
 
       renderer.render(scene,camera);
