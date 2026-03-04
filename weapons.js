@@ -6,9 +6,50 @@ export const weaponCatalog = {
 };
 
 export function resolveWeaponSelection() {
-  const weaponPrompt = (localStorage.getItem('officecraft_weapon') || '').toLowerCase();
-  const weaponInput = (prompt('무기 선택: 새총 / 마법 지팡이 / k2 / 석궁', weaponPrompt || '새총') || '새총').trim().toLowerCase();
-  const weaponKey = weaponInput.includes('지팡이') ? 'wand' : weaponInput.includes('k2') ? 'k2' : weaponInput.includes('석궁') ? 'crossbow' : 'slingshot';
-  localStorage.setItem('officecraft_weapon', weaponInput);
-  return weaponCatalog[weaponKey];
+  return new Promise((resolve) => {
+    const saved = (localStorage.getItem('officecraft_weapon_key') || 'slingshot').toLowerCase();
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.62);display:flex;align-items:center;justify-content:center;';
+
+    const card = document.createElement('div');
+    card.style.cssText = 'width:min(780px,92vw);background:#111827;color:#fff;border-radius:14px;padding:18px;box-shadow:0 20px 40px rgba(0,0,0,.4);';
+    card.innerHTML = '<div style="font-weight:700;font-size:18px;margin-bottom:12px">무기 선택</div><div style="opacity:.85;margin-bottom:14px">아래 무기 박스를 클릭해서 선택하세요.</div>';
+
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;';
+
+    const items = [
+      { key:'slingshot', title:'새총', shape:'Y' },
+      { key:'wand', title:'마법 지팡이', shape:'✦' },
+      { key:'k2', title:'K2', shape:'▇' },
+      { key:'crossbow', title:'석궁', shape:'⟛' }
+    ];
+
+    const pick = (key) => {
+      const w = weaponCatalog[key] || weaponCatalog.slingshot;
+      localStorage.setItem('officecraft_weapon_key', key);
+      wrap.remove();
+      resolve(w);
+    };
+
+    for (const item of items) {
+      const btn = document.createElement('button');
+      const active = item.key === saved;
+      btn.style.cssText = `border:1px solid ${active ? '#60a5fa' : '#374151'};background:${active ? '#1f2937' : '#0f172a'};color:#fff;border-radius:12px;padding:14px;cursor:pointer;text-align:left;`;
+      btn.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <strong>${item.title}</strong>
+          <span style="font-size:22px">${item.shape}</span>
+        </div>
+        <div style="margin-top:8px;opacity:.8;font-size:12px">클릭해서 선택</div>
+      `;
+      btn.onclick = () => pick(item.key);
+      grid.appendChild(btn);
+    }
+
+    card.appendChild(grid);
+    wrap.appendChild(card);
+    document.body.appendChild(wrap);
+  });
 }

@@ -9,7 +9,7 @@ import { createProjectileMesh } from './projectiles.js';
     const roomId = new URLSearchParams(location.search).get('room') || 'office-1';
     const nick = resolveNickname();
 
-    const localWeapon = resolveWeaponSelection();
+    const localWeapon = await resolveWeaponSelection();
     const localWeaponRange = +(localWeapon.len * 5).toFixed(1);
 
     const scene = new THREE.Scene();
@@ -180,14 +180,21 @@ import { createProjectileMesh } from './projectiles.js';
         hair.position.y = 1.86;
       }
 
+      const eyeWhiteMat = new THREE.MeshStandardMaterial({color:0xffffff});
+      const pupilMat = new THREE.MeshStandardMaterial({color:0x111111});
+      const eWL = new THREE.Mesh(new THREE.SphereGeometry(0.05,8,8), eyeWhiteMat); eWL.position.set(-0.11,1.58,0.26);
+      const eWR = new THREE.Mesh(new THREE.SphereGeometry(0.05,8,8), eyeWhiteMat); eWR.position.set(0.11,1.58,0.26);
+      const ePL = new THREE.Mesh(new THREE.SphereGeometry(0.022,8,8), pupilMat); ePL.position.set(-0.11,1.58,0.305);
+      const ePR = new THREE.Mesh(new THREE.SphereGeometry(0.022,8,8), pupilMat); ePR.position.set(0.11,1.58,0.305);
+
       const legMat = new THREE.MeshStandardMaterial({color:0x2f3740});
       const lLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.65,0.22), legMat); lLeg.position.set(-0.16,0.22,0);
       const rLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.65,0.22), legMat); rLeg.position.set(0.16,0.22,0);
-      g.add(body, head, hair, lLeg, rLeg); g.position.set(x,0,z);
+      g.add(body, head, hair, eWL, eWR, ePL, ePR, lLeg, rLeg); g.position.set(x,0,z);
       const seat = opts.seat || deskSeats[Math.floor(Math.random()*deskSeats.length)] || {x, z};
       g.userData = {
         id, hp:3,
-        lLeg, rLeg, gait: Math.random()*Math.PI*2,
+        lLeg, rLeg, eyeL:ePL, eyeR:ePR, gait: Math.random()*Math.PI*2,
         speed:0.9+Math.random()*0.8,
         dir:new THREE.Vector3(Math.random()*2-1,0,Math.random()*2-1).normalize(),
         turnTimer:0.8+Math.random()*2.2,
@@ -195,6 +202,7 @@ import { createProjectileMesh } from './projectiles.js';
         seatX: seat.x, seatZ: seat.z,
         seated: opts.seated ?? true,
         entering: opts.entering ?? false,
+        willLeave: Math.random() < 0.30,
         stateTimer: 2.0 + Math.random()*2.0,
         moveTimer: 0
       };
@@ -451,7 +459,7 @@ import { createProjectileMesh } from './projectiles.js';
       mesh.userData.life = ult ? 6 : 3;
       mesh.userData.ult = ult;
       mesh.userData.damage = ult ? 999 : 1;
-      mesh.userData.fxMult = ult ? 20 : 1;
+      mesh.userData.fxMult = ult ? 50 : 1;
       mesh.userData.gravity = ult ? 0 : 10;
       mesh.userData.noHit = noHit;
       scene.add(mesh);
@@ -549,6 +557,8 @@ import { createProjectileMesh } from './projectiles.js';
           n.userData.gait += dt*9;
           n.userData.lLeg.rotation.x = Math.sin(n.userData.gait)*0.8;
           n.userData.rLeg.rotation.x = -Math.sin(n.userData.gait)*0.8;
+          n.userData.eyeL.position.x += (-0.11 - n.userData.eyeL.position.x) * 0.2;
+          n.userData.eyeR.position.x += (0.11 - n.userData.eyeR.position.x) * 0.2;
           continue;
         }
 
@@ -560,13 +570,21 @@ import { createProjectileMesh } from './projectiles.js';
           n.rotation.y += (0 - n.rotation.y) * 0.08;
           n.userData.lLeg.rotation.x *= 0.75;
           n.userData.rLeg.rotation.x *= 0.75;
+
+          // 눈: 집중 시 정면, 자리 이탈 1초 전 측면 시선
+          const lookSide = n.userData.willLeave && n.userData.stateTimer < 1.0;
+          const eyeTargetX = lookSide ? 0.04 : 0;
+          n.userData.eyeL.position.x += ((-0.11 + eyeTargetX) - n.userData.eyeL.position.x) * 0.2;
+          n.userData.eyeR.position.x += ((0.11 + eyeTargetX) - n.userData.eyeR.position.x) * 0.2;
+
           if(n.userData.stateTimer <= 0){
             n.userData.stateTimer = 2.0 + Math.random()*2.0;
-            if(Math.random() < 0.30){
+            if(n.userData.willLeave){
               n.userData.seated = false;
               n.userData.moveTimer = 3.0 + Math.random()*4.0;
               n.userData.dir.set(Math.random()*2-1,0,Math.random()*2-1).normalize();
             }
+            n.userData.willLeave = Math.random() < 0.30;
           }
         } else {
           // 자리 이탈 후 이동
@@ -579,6 +597,8 @@ import { createProjectileMesh } from './projectiles.js';
           n.position.addScaledVector(n.userData.dir,n.userData.speed*dt);
           avoidWallsOrTurn(n);
           n.rotation.y=Math.atan2(n.userData.dir.x,n.userData.dir.z);
+          n.userData.eyeL.position.x += (-0.11 - n.userData.eyeL.position.x) * 0.2;
+          n.userData.eyeR.position.x += (0.11 - n.userData.eyeR.position.x) * 0.2;
           n.userData.gait += dt*10;
           n.userData.lLeg.rotation.x = Math.sin(n.userData.gait)*0.85;
           n.userData.rLeg.rotation.x = -Math.sin(n.userData.gait)*0.85;
