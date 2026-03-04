@@ -337,7 +337,7 @@
       updateAlive();
     }
 
-    let spawnTimer = 10;
+    let spawnTimer = 7;
 
     // net
     const netEl = document.getElementById('netState');
@@ -516,7 +516,7 @@
       camera.getWorldDirection(d);
       orb.position.copy(p).addScaledVector(d, 0.55);
       orb.userData.v = d.multiplyScalar(28);
-      orb.userData.life = 1.2;
+      orb.userData.life = 999;
       scene.add(orb);
       spells.push(orb);
 
@@ -654,11 +654,9 @@
 
       for(let i=spells.length-1;i>=0;i--){
         const b = spells[i];
-        b.userData.life -= dt;
         b.position.addScaledVector(b.userData.v, dt);
         b.userData.v.y -= 10*dt;
-        b.scale.setScalar(0.9 + Math.max(0,b.userData.life)*0.25);
-        if(b.userData.life<=0 || b.position.y < -1){ scene.remove(b); spells.splice(i,1); }
+        if(b.position.y <= 0){ scene.remove(b); spells.splice(i,1); }
       }
 
       for(let i=hitFx.length-1;i>=0;i--){
@@ -673,7 +671,7 @@
 
       spawnTimer -= dt;
       if(spawnTimer <= 0){
-        spawnTimer = 10;
+        spawnTimer = 7;
         spawnFromRandomDoor();
       }
 
