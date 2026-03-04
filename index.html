@@ -22,6 +22,9 @@
     #chatWrap{position:fixed;right:10px;bottom:10px;z-index:16;width:280px;background:rgba(0,0,0,.42);border-radius:10px;color:#fff;overflow:hidden}
     #chatLog{height:110px;overflow:auto;padding:8px;font-size:12px}
     #chatInput{width:100%;box-sizing:border-box;border:none;outline:none;padding:8px;font-size:12px;background:rgba(255,255,255,.92)}
+    #leaderboard{position:fixed;right:10px;bottom:170px;z-index:16;width:280px;background:rgba(0,0,0,.45);color:#fff;border-radius:10px;padding:8px;font-size:12px}
+    #leaderboard h4{margin:0 0 6px 0;font-size:13px}
+    #lbList{margin:0;padding-left:16px;max-height:140px;overflow:auto}
   </style>
 </head>
 <body>
@@ -42,6 +45,11 @@
     <button class="mbtn" id="jumpBtn">점프</button>
     <button class="mbtn" id="hitBtn">공격</button>
     <button class="mbtn" id="ultBtn" style="bottom:194px">필살기</button>
+  </div>
+
+  <div id="leaderboard">
+    <h4>🏆 리더보드</h4>
+    <ol id="lbList"></ol>
   </div>
 
   <div id="chatWrap">
@@ -218,6 +226,20 @@
     document.getElementById('weaponRange').textContent = `${localWeaponRange}m`;
     document.getElementById('roomId').textContent = roomId;
     let score = 0;
+    const scores = new Map();
+    scores.set(nick, 0);
+    const lbList = document.getElementById('lbList');
+    function renderLeaderboard(){
+      const rows = [...scores.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
+      lbList.innerHTML = rows.map(([name,sc]) => `<li>${name}: ${sc}</li>`).join('');
+    }
+    function awardScore(playerName, points){
+      const cur = scores.get(playerName) || 0;
+      const next = cur + points;
+      scores.set(playerName, next);
+      if(playerName === nick){ score = next; scoreEl.textContent = score; }
+      renderLeaderboard();
+    }
     let chiHits = 0;
     let ultimateReady = false;
     let ultimateArmed = false;
@@ -252,6 +274,7 @@
     }
     updateAlive();
     updateChiUI();
+    renderLeaderboard();
 
     function spawnFromRandomDoor(){
       if(!deskSeats.length) return;
@@ -323,6 +346,7 @@
           ex.add(tag);
           ex.userData.tag = tag;
         }
+        if(name && !scores.has(name)){ scores.set(name, 0); renderLeaderboard(); }
         return ex;
       }
       const g = new THREE.Group();
@@ -337,17 +361,19 @@
       const tag = makeNameTag(name);
       g.add(tag);
       g.userData.tag = tag;
+      if(name && !scores.has(name)){ scores.set(name, 0); renderLeaderboard(); }
       scene.add(g); remotes.set(id,g); return g;
     }
 
     function applyNpcHit(id, killer='', damage=1, fxMult=1){
-      const npc = npcById.get(id); if(!npc || npc.userData.dead) return;
+      const npc = npcById.get(id); if(!npc || npc.userData.dead) return false;
       npc.userData.hp -= damage; npc.position.y = 0.12; setTimeout(()=>{ if(!npc.userData.dead) npc.position.y=0; }, 80);
       spawnHitFx(npc.position.clone().add(new THREE.Vector3(0,1.3,0)), fxMult);
       if(npc.userData.hp <= 0){
         npc.userData.dead = true; npc.visible = false; updateAlive();
-        if(killer===nick){ score += 100; scoreEl.textContent = score; }
+        return true;
       }
+      return false;
     }
 
     function wireConn(conn){
@@ -359,12 +385,18 @@
           if(isHost) sendAll({type:'join', from: actorId, nick: msg.nick || 'guest'}, conn);
         }
         if(msg?.type==='state'){
-          const m = ensureRemote(actorId, msg.nick || 'guest');
+          const actorNick = msg.nick || 'guest';
+          const m = ensureRemote(actorId, actorNick);
           m.position.set(msg.s.x, msg.s.y-1.6, msg.s.z);
           m.rotation.y = msg.s.yaw;
-          if(isHost) sendAll({type:'state', from: actorId, nick: msg.nick || 'guest', s: msg.s}, conn);
+          if(typeof msg.score === 'number'){ scores.set(actorNick, msg.score); renderLeaderboard(); }
+          if(isHost) sendAll({type:'state', from: actorId, nick: actorNick, s: msg.s, score: msg.score}, conn);
         }
-        if(msg?.type==='hitNpc'){ applyNpcHit(msg.id, msg.by, msg.damage||1, msg.fxMult||1); if(isHost) sendAll(msg, conn); }
+        if(msg?.type==='hitNpc'){
+          const killed = applyNpcHit(msg.id, msg.by, msg.damage||1, msg.fxMult||1);
+          if(killed && msg.by) awardScore(msg.by, 100);
+          if(isHost) sendAll(msg, conn);
+        }
         if(msg?.type==='chat'){ logChat(`${msg.nick}: ${msg.text}`); if(isHost) sendAll(msg, conn); }
       });
       conn.on('close', ()=>{ const m=remotes.get(conn.peer); if(m){scene.remove(m); remotes.delete(conn.peer);} });
@@ -446,14 +478,14 @@
       const target = hits[0].object.parent;
 
       if(target.userData.seated && !ult){
-        score -= 80;
-        scoreEl.textContent = score;
+        awardScore(nick, -80);
         return;
       }
 
       const damage = ult ? 999 : 1;
       const fxMult = ult ? 10 : 1;
-      applyNpcHit(target.userData.id, nick, damage, fxMult);
+      const killed = applyNpcHit(target.userData.id, nick, damage, fxMult);
+      if(killed) awardScore(nick, 100);
       if(ult){ ultimateArmed = false; ultimateReady = false; chiHits = 0; updateChiUI(); }
       else addChi(1);
       sendAll({type:'hitNpc', id:target.userData.id, by:nick, damage, fxMult});
@@ -594,7 +626,7 @@
       }
 
       netTick += dt;
-      if(netTick>0.06){ netTick=0; sendAll({type:'state', s:{x:player.position.x,y:player.position.y,z:player.position.z,yaw}, nick}); }
+      if(netTick>0.06){ netTick=0; sendAll({type:'state', s:{x:player.position.x,y:player.position.y,z:player.position.z,yaw}, nick, score}); }
 
       renderer.render(scene,camera);
     }
