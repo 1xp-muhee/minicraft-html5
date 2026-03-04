@@ -123,6 +123,7 @@
     function wall(x,y,z,w,h,d,col=0xe8edf2){ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshStandardMaterial({color:col})); m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true; scene.add(m); }
     wall(0,2,-40,80,5,1); wall(0,2,40,80,5,1); wall(-40,2,0,1,5,80); wall(40,2,0,1,5,80);
 
+    const deskSeats = [];
     function desk(x,z){
       const top = new THREE.Mesh(new THREE.BoxGeometry(3,0.25,2), new THREE.MeshStandardMaterial({color:0x8d6e63}));
       top.position.set(x,1.2,z); top.castShadow=true; top.receiveShadow=true; scene.add(top);
@@ -130,8 +131,22 @@
       [[1.3,0.6,0.8],[-1.3,0.6,0.8],[1.3,0.6,-0.8],[-1.3,0.6,-0.8]].forEach(([lx,ly,lz])=>{ const leg = new THREE.Mesh(legGeo, legMat); leg.position.set(x+lx,ly,z+lz); leg.castShadow=true; leg.receiveShadow=true; scene.add(leg); });
       const pc = new THREE.Mesh(new THREE.BoxGeometry(0.9,0.6,0.08), new THREE.MeshStandardMaterial({color:0x202225}));
       pc.position.set(x,1.65,z-0.45); scene.add(pc);
+      deskSeats.push({x, z: z+0.9});
     }
     for(let gx=-24; gx<=24; gx+=8) for(let gz=-24; gz<=24; gz+=8) if(Math.random()>0.18) desk(gx,gz);
+
+    // 4-side doors
+    function door(x,y,z,w,h,d){
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshStandardMaterial({color:0x5f6b76}));
+      m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true; scene.add(m);
+    }
+    door(0,1.5,-39.45,6,3,0.5);
+    door(0,1.5,39.45,6,3,0.5);
+    door(-39.45,1.5,0,0.5,3,6);
+    door(39.45,1.5,0,0.5,3,6);
+    const doorSpawns = [
+      {x:0,z:-37.8},{x:0,z:37.8},{x:-37.8,z:0},{x:37.8,z:0}
+    ];
 
     // first-person hand + swing
     const handRoot = new THREE.Group();
@@ -179,19 +194,21 @@
     const npcGroup = new THREE.Group(); scene.add(npcGroup);
     const raycaster = new THREE.Raycaster();
 
-    function makeNPC(x,z,id){
+    function makeNPC(x,z,id,opts={}){
       const g = new THREE.Group();
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color:0x4f79d8})); body.position.y = 0.8;
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xf0c7a4})); head.position.y = 1.55;
       g.add(body, head); g.position.set(x,0,z);
+      const seat = opts.seat || deskSeats[Math.floor(Math.random()*deskSeats.length)] || {x, z};
       g.userData = {
         id, hp:3,
         speed:0.9+Math.random()*0.8,
         dir:new THREE.Vector3(Math.random()*2-1,0,Math.random()*2-1).normalize(),
         turnTimer:0.8+Math.random()*2.2,
         dead:false,
-        seatX:x, seatZ:z,
-        seated:true,
+        seatX: seat.x, seatZ: seat.z,
+        seated: opts.seated ?? true,
+        entering: opts.entering ?? false,
         stateTimer: 2.0 + Math.random()*2.0,
         moveTimer: 0
       };
@@ -228,9 +245,28 @@
       updateChiUI();
       return true;
     }
-    for(let i=0;i<18;i++){ const id=`n${i}`; makeNPC((Math.random()*60)-30,(Math.random()*60)-30,id); npcById.set(id,npcs[npcs.length-1]); }
+    let npcSeq = 0;
+    const initialCount = Math.min(18, deskSeats.length);
+    for(let i=0;i<initialCount;i++){
+      const seat = deskSeats[i];
+      const id=`n${npcSeq++}`;
+      makeNPC(seat.x, seat.z, id, { seat, seated:true, entering:false });
+      npcById.set(id,npcs[npcs.length-1]);
+    }
     updateAlive();
     updateChiUI();
+
+    function spawnFromRandomDoor(){
+      if(!deskSeats.length) return;
+      const door = doorSpawns[Math.floor(Math.random()*doorSpawns.length)];
+      const seat = deskSeats[Math.floor(Math.random()*deskSeats.length)];
+      const id = `n${npcSeq++}`;
+      makeNPC(door.x, door.z, id, { seat, seated:false, entering:true });
+      npcById.set(id, npcs[npcs.length-1]);
+      updateAlive();
+    }
+
+    let spawnTimer = 10;
 
     // net
     const netEl = document.getElementById('netState');
@@ -479,6 +515,22 @@
       for(const n of npcs){
         if(n.userData.dead) continue;
 
+        if(n.userData.entering){
+          const dx = n.userData.seatX - n.position.x;
+          const dz = n.userData.seatZ - n.position.z;
+          const dist = Math.hypot(dx, dz);
+          if(dist < 0.45){
+            n.userData.entering = false;
+            n.userData.seated = true;
+            n.userData.stateTimer = 2.0 + Math.random()*2.0;
+          } else {
+            n.position.x += (dx/dist) * n.userData.speed * dt;
+            n.position.z += (dz/dist) * n.userData.speed * dt;
+            n.rotation.y = Math.atan2(dx, dz);
+          }
+          continue;
+        }
+
         n.userData.stateTimer -= dt;
         if(n.userData.seated){
           // 기본: 자리에서 근무
@@ -521,6 +573,12 @@
         p.userData.v.multiplyScalar(0.985);
         p.scale.setScalar(Math.max(0.01,p.userData.life*2.2));
         if(p.userData.life<=0){ scene.remove(p); hitFx.splice(i,1);} }
+
+      spawnTimer -= dt;
+      if(spawnTimer <= 0){
+        spawnTimer = 10;
+        spawnFromRandomDoor();
+      }
 
       netTick += dt;
       if(netTick>0.06){ netTick=0; sendAll({type:'state', s:{x:player.position.x,y:player.position.y,z:player.position.z,yaw}, nick}); }
