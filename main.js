@@ -730,7 +730,7 @@ import { createProjectileMesh } from './projectiles.js';
 
     function clampPlayer(p){ p.x=Math.max(-38,Math.min(38,p.x)); p.z=Math.max(-38,Math.min(38,p.z)); }
     function hireNpcGuard(){
-      if(score < 300) return;
+      if(score < 300){ logChat('고용 실패: 점수 부족(300 필요)'); return false; }
       // recruit nearest neutral(yellow) worker
       let best = null; let bestD = 9999;
       for(const n of npcs){
@@ -739,7 +739,7 @@ import { createProjectileMesh } from './projectiles.js';
         const d = n.position.distanceTo(player.position);
         if(d < bestD){ bestD = d; best = n; }
       }
-      if(!best || bestD > 8) return;
+      if(!best || bestD > 12){ logChat('고용 실패: 근처에 고용 가능한 직원 없음'); return false; }
 
       awardScore(nick, -300);
 
@@ -760,6 +760,8 @@ import { createProjectileMesh } from './projectiles.js';
       hiredNpcs.push(best);
       sendAll({type:'guardSpawn', guardId: best.userData.guardId, team, x: best.position.x, z: best.position.z});
       updateAlive();
+      logChat('고용 성공: 아군 가드 합류');
+      return true;
     }
     function supportHeightAt(x, z, currentY){
       let h = 1.6; // floor eye height
@@ -805,7 +807,11 @@ import { createProjectileMesh } from './projectiles.js';
     document.getElementById('hitBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); if(controlEnabled) castSpell(); }, {passive:false});
     document.getElementById('jumpBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); if(controlEnabled) move.jump=true; }, {passive:false});
     document.getElementById('ultBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); if(controlEnabled) consumeUltimate(); }, {passive:false});
-    document.getElementById('hireBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); if(controlEnabled) hireNpcGuard(); }, {passive:false});
+    const hireBtn = document.getElementById('hireBtn');
+    const onHirePress = (e)=>{ e.preventDefault(); e.stopPropagation(); if(controlEnabled) hireNpcGuard(); };
+    hireBtn.addEventListener('touchstart', onHirePress, {passive:false});
+    hireBtn.addEventListener('pointerdown', onHirePress, {passive:false});
+    hireBtn.addEventListener('click', onHirePress, {passive:false});
 
     // mobile touch
     const stickBase = document.getElementById('stickBase'); const stickKnob = document.getElementById('stickKnob');
