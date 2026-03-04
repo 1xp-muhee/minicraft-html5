@@ -147,6 +147,36 @@ import { createProjectileMesh } from './projectiles.js';
       towerSurfaces.push({ minX:x-0.39, maxX:x+0.39, minZ:z-1.1, maxZ:z+1.1, topY:y+0.2 });
     }
 
+    // Team towers (office tower defense)
+    const teamBases = { blue: new THREE.Vector3(-30,0,0), red: new THREE.Vector3(30,0,0) };
+    function buildTeamTower(base, color){
+      const core = new THREE.Mesh(new THREE.CylinderGeometry(2.8,3.3,7,12), new THREE.MeshStandardMaterial({color}));
+      core.position.set(base.x,3.5,base.z); core.castShadow=true; core.receiveShadow=true; scene.add(core);
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(4,4,0.6,12), new THREE.MeshStandardMaterial({color:0xd1d5db}));
+      top.position.set(base.x,7.1,base.z); scene.add(top);
+      towerSurfaces.push({minX:base.x-3.9,maxX:base.x+3.9,minZ:base.z-3.9,maxZ:base.z+3.9,topY:7.4});
+    }
+    buildTeamTower(teamBases.blue, 0x2563eb);
+    buildTeamTower(teamBases.red, 0xb91c1c);
+
+    const flags = {
+      blue: { base: teamBases.blue.clone(), takenBy:null, mesh:null },
+      red: { base: teamBases.red.clone(), takenBy:null, mesh:null }
+    };
+    function makeFlag(teamKey){
+      const g = new THREE.Group();
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,1.8,8), new THREE.MeshStandardMaterial({color:0xe5e7eb}));
+      pole.position.y = 0.9;
+      const cloth = new THREE.Mesh(new THREE.BoxGeometry(0.9,0.45,0.05), new THREE.MeshStandardMaterial({color:teamKey==='blue'?0x2563eb:0xb91c1c}));
+      cloth.position.set(0.45,1.35,0);
+      g.add(pole, cloth);
+      return g;
+    }
+    flags.blue.mesh = makeFlag('blue'); flags.red.mesh = makeFlag('red');
+    flags.blue.mesh.position.copy(flags.blue.base).add(new THREE.Vector3(0,7.4,0));
+    flags.red.mesh.position.copy(flags.red.base).add(new THREE.Vector3(0,7.4,0));
+    scene.add(flags.blue.mesh, flags.red.mesh);
+
     // 4-side doors
     function door(x,y,z,w,h,d){
       const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshStandardMaterial({color:0x5f6b76}));
@@ -287,6 +317,7 @@ import { createProjectileMesh } from './projectiles.js';
       const baseSpeed = 0.9+Math.random()*0.8;
       g.userData = {
         id, hp:3,
+        team:'neutral',
         lLeg, rLeg, eyeL:ePL, eyeR:ePR, alertTag, gait: Math.random()*Math.PI*2,
         speed:baseSpeed, baseSpeed,
         dir:new THREE.Vector3(Math.random()*2-1,0,Math.random()*2-1).normalize(),
@@ -308,12 +339,16 @@ import { createProjectileMesh } from './projectiles.js';
     const aliveEl = document.getElementById('alive');
     const teamEl = document.getElementById('teamName');
     const hpEl = document.getElementById('hpVal');
+    const blueCapEl = document.getElementById('blueCap');
+    const redCapEl = document.getElementById('redCap');
     document.getElementById('weaponName').textContent = localWeapon.name;
     document.getElementById('weaponRange').textContent = `${localWeaponRange}m`;
     document.getElementById('roomId').textContent = roomId;
     teamEl.textContent = team === 'blue' ? '블루팀' : '레드팀';
     let playerHp = 100;
     let score = 0;
+    const captures = { blue:0, red:0 };
+    function updateCaptureUI(){ blueCapEl.textContent = captures.blue; redCapEl.textContent = captures.red; }
     const scores = new Map();
     scores.set(nick, 0);
     const lbList = document.getElementById('lbList');
@@ -370,6 +405,7 @@ import { createProjectileMesh } from './projectiles.js';
     }
     updateAlive();
     updateChiUI();
+    updateCaptureUI();
     renderLeaderboard();
 
     function spawnFromRandomDoor(){
@@ -598,6 +634,16 @@ import { createProjectileMesh } from './projectiles.js';
     function clampPlayer(p){ p.x=Math.max(-38,Math.min(38,p.x)); p.z=Math.max(-38,Math.min(38,p.z)); }
     function hireNpcGuard(){
       if(score < 300) return;
+      // recruit nearest neutral(yellow) worker
+      let best = null; let bestD = 9999;
+      for(const n of npcs){
+        if(n.userData.dead) continue;
+        if(n.userData.team && n.userData.team !== 'neutral') continue;
+        const d = n.position.distanceTo(player.position);
+        if(d < bestD){ bestD = d; best = n; }
+      }
+      if(!best || bestD > 8) return;
+
       awardScore(nick, -300);
       const g = new THREE.Group();
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color: team==='blue'?0x2563eb:0xdc2626}));
@@ -605,11 +651,14 @@ import { createProjectileMesh } from './projectiles.js';
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xf0c7a4}));
       head.position.y = 1.55;
       g.add(body, head);
-      g.position.copy(player.position);
-      g.position.y = 0;
-      g.userData = {team, lastAtk:0};
+      g.position.copy(best.position);
+      g.userData = {team, lastAtk:0, carrying:null};
       scene.add(g);
       hiredNpcs.push(g);
+
+      best.userData.dead = true;
+      best.visible = false;
+      updateAlive();
     }
     function supportHeightAt(x, z, currentY){
       let h = 1.6; // floor eye height
@@ -820,24 +869,71 @@ import { createProjectileMesh } from './projectiles.js';
         }
       }
 
-      // hired NPC guards attack enemy team players
+      // hired NPC guards: enemy chase + flag capture
       for(const h of hiredNpcs){
+        const enemyTeam = h.userData.team === 'blue' ? 'red' : 'blue';
+        const homeBase = h.userData.team === 'blue' ? teamBases.blue : teamBases.red;
+        const enemyBase = enemyTeam === 'blue' ? teamBases.blue : teamBases.red;
+
+        // capture logic
+        if(!h.userData.carrying){
+          const enemyFlag = flags[enemyTeam];
+          if(!enemyFlag.takenBy && h.position.distanceTo(enemyBase) < 2.6){
+            enemyFlag.takenBy = h;
+            h.userData.carrying = enemyTeam;
+          }
+        } else {
+          const myFlag = flags[h.userData.team];
+          if(h.position.distanceTo(homeBase) < 2.6 && !myFlag.takenBy){
+            captures[h.userData.team] += 1;
+            updateCaptureUI();
+            h.userData.carrying = null;
+            const returnedFlag = flags[h.userData.team === 'blue' ? 'red' : 'blue'];
+            returnedFlag.takenBy = null;
+            awardScore(nick, 500);
+          }
+        }
+
+        let targetPos = null;
+        // prioritize enemy players
         let target = null;
         let best = 9999;
         for(const m of remotes.values()){
-          if(!m.userData || m.userData.team===team || m.userData.team==='unknown') continue;
+          if(!m.userData || m.userData.team===h.userData.team || m.userData.team==='unknown') continue;
           const d = h.position.distanceTo(m.position);
           if(d < best){ best = d; target = m; }
         }
-        if(!target) continue;
-        const dir = target.position.clone().sub(h.position);
+
+        if(target){
+          targetPos = target.position;
+        } else {
+          targetPos = h.userData.carrying ? homeBase : enemyBase;
+        }
+
+        const dir = targetPos.clone().sub(h.position);
         const dist = dir.length();
-        if(dist > 0.01){ dir.normalize(); h.position.addScaledVector(dir, Math.min(3*dt, dist)); h.rotation.y = Math.atan2(dir.x, dir.z); }
+        if(dist > 0.01){
+          dir.normalize();
+          const spd = h.userData.carrying ? 3.8 : 3.0;
+          h.position.addScaledVector(dir, Math.min(spd*dt, dist));
+          h.rotation.y = Math.atan2(dir.x, dir.z);
+        }
+
         h.userData.lastAtk += dt;
-        if(dist < 2.1 && h.userData.lastAtk > 1.0){
+        if(target && dist < 2.1 && h.userData.lastAtk > 1.0){
           h.userData.lastAtk = 0;
           const enemyNick = target.userData?.name;
           if(enemyNick) sendAll({type:'playerHit', targetNick: enemyNick, damage: 10, by: nick, fromX: h.position.x, fromZ: h.position.z});
+        }
+      }
+
+      // update flag mesh positions
+      for(const key of ['blue','red']){
+        const f = flags[key];
+        if(f.takenBy){
+          f.mesh.position.copy(f.takenBy.position).add(new THREE.Vector3(0,2.2,0));
+        } else {
+          f.mesh.position.copy(f.base).add(new THREE.Vector3(0,7.4,0));
         }
       }
 
