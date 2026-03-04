@@ -214,10 +214,10 @@ import { createProjectileMesh } from './projectiles.js';
 
       const eyeWhiteMat = new THREE.MeshStandardMaterial({color:0xffffff});
       const pupilMat = new THREE.MeshStandardMaterial({color:0x111111});
-      const eWL = new THREE.Mesh(new THREE.SphereGeometry(0.05,8,8), eyeWhiteMat); eWL.position.set(-0.11,1.58,0.26);
-      const eWR = new THREE.Mesh(new THREE.SphereGeometry(0.05,8,8), eyeWhiteMat); eWR.position.set(0.11,1.58,0.26);
-      const ePL = new THREE.Mesh(new THREE.SphereGeometry(0.022,8,8), pupilMat); ePL.position.set(-0.11,1.58,0.305);
-      const ePR = new THREE.Mesh(new THREE.SphereGeometry(0.022,8,8), pupilMat); ePR.position.set(0.11,1.58,0.305);
+      const eWL = new THREE.Mesh(new THREE.SphereGeometry(0.05,8,8), eyeWhiteMat); eWL.position.set(-0.11,1.58,-0.26);
+      const eWR = new THREE.Mesh(new THREE.SphereGeometry(0.05,8,8), eyeWhiteMat); eWR.position.set(0.11,1.58,-0.26);
+      const ePL = new THREE.Mesh(new THREE.SphereGeometry(0.022,8,8), pupilMat); ePL.position.set(-0.11,1.58,-0.305);
+      const ePR = new THREE.Mesh(new THREE.SphereGeometry(0.022,8,8), pupilMat); ePR.position.set(0.11,1.58,-0.305);
 
       const legMat = new THREE.MeshStandardMaterial({color:0x2f3740});
       const lLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.65,0.22), legMat); lLeg.position.set(-0.16,0.22,0);
