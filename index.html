@@ -117,6 +117,21 @@
     const hand = new THREE.Mesh(new THREE.BoxGeometry(0.18,0.35,0.18), new THREE.MeshStandardMaterial({color:0xe6b892}));
     hand.rotation.z = -0.25;
     handRoot.add(hand);
+
+    const whipRoot = new THREE.Group();
+    whipRoot.position.set(0.06, -0.06, -0.02);
+    handRoot.add(whipRoot);
+    const whipHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.028,0.03,0.26,8), new THREE.MeshStandardMaterial({color:0x4d3425}));
+    whipHandle.rotation.z = Math.PI/2;
+    whipRoot.add(whipHandle);
+    const whipSegments = [];
+    for(let i=0;i<7;i++){
+      const seg = new THREE.Mesh(new THREE.CylinderGeometry(0.015,0.012,0.2,6), new THREE.MeshStandardMaterial({color: i%2?0x2a2018:0x3a2a1d}));
+      seg.position.x = 0.16 + i*0.17;
+      seg.rotation.z = Math.PI/2;
+      whipRoot.add(seg);
+      whipSegments.push(seg);
+    }
     let punchT = 0;
 
     // hit effect
@@ -238,7 +253,7 @@
     function clampPlayer(p){ p.x=Math.max(-38,Math.min(38,p.x)); p.z=Math.max(-38,Math.min(38,p.z)); }
 
     function hitNPC(){
-      punchT = 0.14;
+      punchT = 0.16;
       raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
       const alive = npcs.filter(n=>!n.userData.dead);
       const hits = raycaster.intersectObjects(alive, true);
@@ -285,9 +300,31 @@
         clampPlayer(player.position);
       }
 
-      // hand animation
-      if(punchT>0){ punchT -= dt; const k = Math.max(0, punchT/0.14); handRoot.position.x = 0.46 + (1-k)*0.18; handRoot.position.y = -0.42 - (1-k)*0.12; handRoot.rotation.z = -(1-k)*0.9; }
-      else { handRoot.position.x += (0.46-handRoot.position.x)*0.22; handRoot.position.y += (-0.42-handRoot.position.y)*0.22; handRoot.rotation.z += (0-handRoot.rotation.z)*0.22; }
+      // hand + whip animation
+      if(punchT>0){
+        punchT -= dt;
+        const k = Math.max(0, punchT/0.16);
+        const swing = (1-k);
+        handRoot.position.x = 0.46 + swing*0.23;
+        handRoot.position.y = -0.42 - swing*0.14;
+        handRoot.rotation.z = -swing*1.05;
+        handRoot.rotation.x = -swing*0.25;
+        whipRoot.rotation.y = -swing*1.2;
+        whipRoot.rotation.z = swing*0.8;
+        for(let i=0;i<whipSegments.length;i++){
+          const t = i/whipSegments.length;
+          whipSegments[i].rotation.y = Math.sin((1-k)*10 - t*2.2) * (0.7*(1-t));
+          whipSegments[i].rotation.x = Math.cos((1-k)*9 - t*2.8) * (0.25*(1-t));
+        }
+      } else {
+        handRoot.position.x += (0.46-handRoot.position.x)*0.22;
+        handRoot.position.y += (-0.42-handRoot.position.y)*0.22;
+        handRoot.rotation.z += (0-handRoot.rotation.z)*0.22;
+        handRoot.rotation.x += (0-handRoot.rotation.x)*0.22;
+        whipRoot.rotation.y += (0-whipRoot.rotation.y)*0.2;
+        whipRoot.rotation.z += (0-whipRoot.rotation.z)*0.2;
+        for(const seg of whipSegments){ seg.rotation.x *= 0.82; seg.rotation.y *= 0.82; }
+      }
 
       for(const n of npcs){ if(n.userData.dead) continue; n.userData.turnTimer-=dt; if(n.userData.turnTimer<=0){ n.userData.turnTimer=0.6+Math.random()*2.5; n.userData.dir.set(Math.random()*2-1,0,Math.random()*2-1).normalize(); } n.position.addScaledVector(n.userData.dir,n.userData.speed*dt); avoidWallsOrTurn(n); n.rotation.y=Math.atan2(n.userData.dir.x,n.userData.dir.z); }
 
