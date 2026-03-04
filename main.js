@@ -82,8 +82,13 @@ import { createProjectileMesh } from './projectiles.js';
     });
 
     if (isTouch) {
-      document.getElementById('controlsText').textContent = '왼쪽 조이스틱 이동 / 점프 버튼';
+      document.getElementById('controlsText').textContent = '왼쪽 조이스틱 이동 / 점프/필살기 버튼';
       document.getElementById('lookText').innerHTML = '오른쪽 화면 드래그 시점 / 공격 버튼 <span class="danger">직원 때리기</span>';
+      // 모바일에서는 HUD 버튼 클릭이 가려지지 않도록 우측 패널 입력 차단
+      const chatWrap = document.getElementById('chatWrap');
+      const leaderboard = document.getElementById('leaderboard');
+      if (chatWrap) chatWrap.style.pointerEvents = 'none';
+      if (leaderboard) leaderboard.style.pointerEvents = 'none';
     }
 
     const floor = new THREE.Mesh(new THREE.BoxGeometry(80,1,80), new THREE.MeshStandardMaterial({color:0xbfc7d1}));
