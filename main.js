@@ -480,6 +480,7 @@ import { createProjectileMesh } from './projectiles.js';
     const hostId = `officecraft-${roomId}`;
     const remotes = new Map();
     const hiredNpcs = [];
+    const remoteGuards = new Map(); // guardId -> mesh
     const conns = [];
     let peer=null, isHost=false;
     const chatLog = document.getElementById('chatLog');
@@ -522,6 +523,19 @@ import { createProjectileMesh } from './projectiles.js';
       let h=0; for(let i=0;i<id.length;i++) h = (h*31 + id.charCodeAt(i)) >>> 0;
       const hue = h % 360;
       return new THREE.Color(`hsl(${hue} 70% 52%)`);
+    }
+
+    function ensureRemoteGuard(guardId, teamKey='blue'){
+      if(remoteGuards.has(guardId)) return remoteGuards.get(guardId);
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color: teamKey==='blue'?0x2563eb:0xdc2626}));
+      body.position.y = 0.8;
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xf0c7a4}));
+      head.position.y = 1.55;
+      g.add(body, head);
+      scene.add(g);
+      remoteGuards.set(guardId, g);
+      return g;
     }
 
     function ensureRemote(id,name='guest'){
@@ -648,6 +662,17 @@ import { createProjectileMesh } from './projectiles.js';
           }
           if(isHost) sendAll(msg, conn);
         }
+        if(msg?.type==='guardSpawn'){
+          const g = ensureRemoteGuard(msg.guardId, msg.team || 'blue');
+          g.position.set(msg.x||0, 0, msg.z||0);
+          if(isHost) sendAll(msg, conn);
+        }
+        if(msg?.type==='guardState'){
+          const g = ensureRemoteGuard(msg.guardId, msg.team || 'blue');
+          g.position.set(msg.x||0, 0, msg.z||0);
+          g.rotation.y = msg.ry || 0;
+          if(isHost) sendAll(msg, conn);
+        }
         if(msg?.type==='chat'){ logChat(`${msg.nick}: ${msg.text}`); if(isHost) sendAll(msg, conn); }
       });
       conn.on('close', ()=>{ const m=remotes.get(conn.peer); if(m){scene.remove(m); remotes.delete(conn.peer);} });
@@ -722,6 +747,7 @@ import { createProjectileMesh } from './projectiles.js';
       best.userData.team = team;
       best.userData.dead = true; // exclude from worker loops/collisions
       best.userData.recruited = true;
+      best.userData.guardId = `${peer?.id || nick}-g-${Date.now()}-${Math.floor(Math.random()*9999)}`;
       best.userData.lastAtk = 0;
       best.userData.carrying = null;
       best.userData.guardDamage = best.userData.isBerserk ? 14 : 10;
@@ -732,6 +758,7 @@ import { createProjectileMesh } from './projectiles.js';
       if(best.userData.seatIndex >= 0) seatOwner.delete(best.userData.seatIndex);
 
       hiredNpcs.push(best);
+      sendAll({type:'guardSpawn', guardId: best.userData.guardId, team, x: best.position.x, z: best.position.z});
       updateAlive();
     }
     function supportHeightAt(x, z, currentY){
@@ -1141,7 +1168,14 @@ import { createProjectileMesh } from './projectiles.js';
       }
 
       netTick += dt;
-      if(netTick>0.06){ netTick=0; sendAll({type:'state', s:{x:player.position.x,y:player.position.y,z:player.position.z,yaw}, nick, score, team, hp: playerHp}); }
+      if(netTick>0.06){
+        netTick=0;
+        sendAll({type:'state', s:{x:player.position.x,y:player.position.y,z:player.position.z,yaw}, nick, score, team, hp: playerHp});
+        for(const h of hiredNpcs){
+          if(!h.userData?.guardId) continue;
+          sendAll({type:'guardState', guardId:h.userData.guardId, team:h.userData.team, x:h.position.x, z:h.position.z, ry:h.rotation.y});
+        }
+      }
 
       renderer.render(scene,camera);
     }
