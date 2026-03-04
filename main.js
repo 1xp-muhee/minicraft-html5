@@ -218,22 +218,31 @@ import { createProjectileMesh } from './projectiles.js';
 
     function makeAlertTag(){
       const cvs = document.createElement('canvas');
-      cvs.width = 128; cvs.height = 128;
-      const ctx = cvs.getContext('2d');
-      ctx.clearRect(0,0,128,128);
-      ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      ctx.beginPath(); ctx.arc(64,64,36,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#ffde59';
-      ctx.font = 'bold 72px system-ui';
+      cvs.width = 320; cvs.height = 120;
+      const tex = new THREE.CanvasTexture(cvs);
+      const mat = new THREE.SpriteMaterial({map:tex, transparent:true, depthTest:false});
+      const sp = new THREE.Sprite(mat);
+      sp.scale.set(2.8,1.05,1);
+      sp.position.set(0,2.55,0);
+      sp.visible = false;
+      sp.userData.canvas = cvs;
+      sp.userData.ctx = cvs.getContext('2d');
+      sp.userData.texture = tex;
+      return sp;
+    }
+
+    function setAlertText(tag, text){
+      const ctx = tag.userData.ctx;
+      const cvs = tag.userData.canvas;
+      ctx.clearRect(0,0,cvs.width,cvs.height);
+      ctx.fillStyle = 'rgba(0,0,0,0.62)';
+      ctx.fillRect(8,16,cvs.width-16,84);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 26px system-ui';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('!', 64, 70);
-      const tex = new THREE.CanvasTexture(cvs);
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true, depthTest:false}));
-      sp.scale.set(0.9,0.9,1);
-      sp.position.set(0,2.45,0);
-      sp.visible = false;
-      return sp;
+      ctx.fillText(text, cvs.width/2, 58);
+      tag.userData.texture.needsUpdate = true;
     }
 
     function makeNPC(x,z,id,opts={}){
@@ -450,6 +459,8 @@ import { createProjectileMesh } from './projectiles.js';
       scene.add(g); remotes.set(id,g); return g;
     }
 
+    const hitVoices = ['아악!','왜 때려요?!','헉, 아파요!','업무중입니다!','저기요?!','도와주세요!','앗, 잠깐만요!'];
+
     function applyNpcHit(id, killer='', damage=1, fxMult=1){
       const npc = npcById.get(id); if(!npc || npc.userData.dead) return false;
       npc.userData.hp -= damage; npc.position.y = 0.12; setTimeout(()=>{ if(!npc.userData.dead) npc.position.y=0; }, 80);
@@ -458,6 +469,8 @@ import { createProjectileMesh } from './projectiles.js';
       if(!npc.userData.seated || npc.userData.entering){
         npc.userData.stunned = 1.0;
         npc.userData.panicReturn = true;
+        const line = hitVoices[Math.floor(Math.random()*hitVoices.length)];
+        setAlertText(npc.userData.alertTag, line);
         npc.userData.alertTag.visible = true;
       }
 
