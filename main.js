@@ -353,6 +353,7 @@ import { createProjectileMesh } from './projectiles.js';
         isBerserk,
         enraged:false,
         keyboard,
+        body,
         atkCd:0,
         lLeg, rLeg, eyeL:ePL, eyeR:ePR, alertTag, gait: Math.random()*Math.PI*2,
         speed:baseSpeed, baseSpeed,
@@ -716,20 +717,21 @@ import { createProjectileMesh } from './projectiles.js';
       if(!best || bestD > 8) return;
 
       awardScore(nick, -300);
-      const g = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color: team==='blue'?0x2563eb:0xdc2626}));
-      body.position.y = 0.8;
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xf0c7a4}));
-      head.position.y = 1.55;
-      g.add(body, head);
-      g.position.copy(best.position);
-      g.userData = {team, lastAtk:0, carrying:null};
-      scene.add(g);
-      hiredNpcs.push(g);
 
-      best.userData.dead = true;
-      best.visible = false;
+      // keep original look/traits, only convert uniform(team color) + role
+      best.userData.team = team;
+      best.userData.dead = true; // exclude from worker loops/collisions
+      best.userData.recruited = true;
+      best.userData.lastAtk = 0;
+      best.userData.carrying = null;
+      best.userData.guardDamage = best.userData.isBerserk ? 14 : 10;
+      best.userData.guardSpeed = best.userData.baseSpeed * (best.userData.isBerserk ? 1.2 : 1.0);
+      best.userData.body?.material?.color?.setHex(team==='blue' ? 0x2563eb : 0xdc2626);
+      best.userData.alertTag.visible = false;
+      best.rotation.z = 0;
       if(best.userData.seatIndex >= 0) seatOwner.delete(best.userData.seatIndex);
+
+      hiredNpcs.push(best);
       updateAlive();
     }
     function supportHeightAt(x, z, currentY){
@@ -1034,7 +1036,7 @@ import { createProjectileMesh } from './projectiles.js';
         const dist = dir.length();
         if(dist > 0.01){
           dir.normalize();
-          const spd = h.userData.carrying ? 3.8 : 3.0;
+          const spd = h.userData.carrying ? (h.userData.guardSpeed||3.0)*1.25 : (h.userData.guardSpeed||3.0);
           h.position.addScaledVector(dir, Math.min(spd*dt, dist));
           h.position.y = 0;
           h.rotation.y = Math.atan2(dir.x, dir.z);
@@ -1044,7 +1046,7 @@ import { createProjectileMesh } from './projectiles.js';
         if(target && dist < 2.1 && h.userData.lastAtk > 1.0){
           h.userData.lastAtk = 0;
           const enemyNick = target.userData?.name;
-          if(enemyNick) sendAll({type:'playerHit', targetNick: enemyNick, damage: 10, by: nick, fromX: h.position.x, fromZ: h.position.z});
+          if(enemyNick) sendAll({type:'playerHit', targetNick: enemyNick, damage: (h.userData.guardDamage||10), by: nick, fromX: h.position.x, fromZ: h.position.z});
         }
       }
 
