@@ -383,11 +383,12 @@ import { createProjectileMesh } from './projectiles.js';
     document.getElementById('roomId').textContent = roomId;
     teamEl.textContent = team === 'blue' ? '블루팀' : '레드팀';
     let playerHp = 100;
-    let score = 0;
+    let score = 3000;
+    scoreEl.textContent = score;
     const captures = { blue:0, red:0 };
     function updateCaptureUI(){ blueCapEl.textContent = captures.blue; redCapEl.textContent = captures.red; }
     const scores = new Map();
-    scores.set(nick, 0);
+    scores.set(nick, 3000);
     const lbList = document.getElementById('lbList');
     function rankTitle(i){
       if(i===0) return 'CEO';
