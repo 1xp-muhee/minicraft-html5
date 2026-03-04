@@ -218,9 +218,17 @@ import { createProjectileMesh } from './projectiles.js';
     const scores = new Map();
     scores.set(nick, 0);
     const lbList = document.getElementById('lbList');
+    function rankTitle(i){
+      if(i===0) return 'CEO';
+      if(i===1) return '임원';
+      if(i===2) return '팀장';
+      if(i<=5) return '선임';
+      return '사원';
+    }
+
     function renderLeaderboard(){
       const rows = [...scores.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
-      lbList.innerHTML = rows.map(([name,sc]) => `<li>${name}: ${sc}</li>`).join('');
+      lbList.innerHTML = rows.map(([name,sc], i) => `<li><strong>${rankTitle(i)}</strong> · ${name}: ${sc}</li>`).join('');
     }
     function awardScore(playerName, points){
       const cur = scores.get(playerName) || 0;
