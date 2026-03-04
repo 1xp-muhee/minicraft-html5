@@ -75,7 +75,7 @@
 
     function hashString(s){ let h=2166136261>>>0; for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619);} return h>>>0; }
     const weaponCatalog = [
-      { name:'마법 지팡이', len:1.0, color:0x5b3a29 }
+      { name:'새총', len:1.1, color:0x6b4f2d }
     ];
     function pickWeapon(seed){ return weaponCatalog[0]; }
     const localWeapon = pickWeapon(`${roomId}:${nick}`);
@@ -208,24 +208,25 @@
     const handRoot = new THREE.Group();
     handRoot.position.set(0.2,-0.34,-0.58);
     camera.add(handRoot);
-    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.18,0.35,0.18), new THREE.MeshStandardMaterial({color:0xe6b892}));
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.13,0.25,0.13), new THREE.MeshStandardMaterial({color:0xe6b892}));
     hand.rotation.z = -0.25;
     handRoot.add(hand);
     handRoot.rotation.set(-0.08, 0, -0.18);
 
-    const wandRoot = new THREE.Group();
-    wandRoot.position.set(0.03, -0.03, -0.24);
-    handRoot.add(wandRoot);
-    const wand = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.012, 0.018, 0.45, 10),
-      new THREE.MeshStandardMaterial({color: localWeapon.color})
-    );
-    wand.rotation.x = Math.PI/2;
-    wand.position.z = -0.14;
-    wandRoot.add(wand);
-    const wandTip = new THREE.Mesh(new THREE.SphereGeometry(0.018, 10, 10), new THREE.MeshStandardMaterial({color:0x9fd3ff, emissive:0x2f6fff, emissiveIntensity:0.7}));
-    wandTip.position.z = -0.36;
-    wandRoot.add(wandTip);
+    const slingRoot = new THREE.Group();
+    slingRoot.position.set(0.03, -0.03, -0.2);
+    handRoot.add(slingRoot);
+    const frameMat = new THREE.MeshStandardMaterial({color: localWeapon.color});
+    const armGeo = new THREE.CylinderGeometry(0.012,0.012,0.2,8);
+    const leftArm = new THREE.Mesh(armGeo, frameMat);
+    leftArm.position.set(-0.05,0.03,-0.02); leftArm.rotation.z = 0.4;
+    const rightArm = new THREE.Mesh(armGeo, frameMat);
+    rightArm.position.set(0.05,0.03,-0.02); rightArm.rotation.z = -0.4;
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.016,0.016,0.14,8), frameMat);
+    grip.rotation.x = Math.PI/2; grip.position.set(0,-0.05,0.03);
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.1,0.008,0.008), new THREE.MeshStandardMaterial({color:0x222222}));
+    band.position.set(0,0.1,-0.02);
+    slingRoot.add(leftArm,rightArm,grip,band);
 
     const spells = [];
     let punchT = 0;
@@ -507,8 +508,8 @@
     function castSpell(){
       punchT = 0.16;
       const orb = new THREE.Mesh(
-        new THREE.SphereGeometry(0.07, 12, 12),
-        new THREE.MeshStandardMaterial({color:0xaee7ff, emissive:0x3a7bff, emissiveIntensity:1.2})
+        new THREE.SphereGeometry(0.06, 10, 10),
+        new THREE.MeshStandardMaterial({color:0x7f8c8d})
       );
       const p = new THREE.Vector3();
       camera.getWorldPosition(p);
@@ -580,7 +581,7 @@
         clampPlayer(player.position);
       }
 
-      // hand + wand animation (forward-facing)
+      // hand + slingshot animation (forward-facing)
       if(punchT>0){
         punchT -= dt;
         const k = Math.max(0, punchT/0.16);
@@ -589,15 +590,15 @@
         handRoot.position.y = -0.34 - swing*0.04;
         handRoot.rotation.z = -0.18 - swing*0.45;
         handRoot.rotation.x = -0.08 - swing*0.22;
-        wandRoot.rotation.y = -swing*0.35;
-        wandRoot.rotation.x = swing*0.22;
+        slingRoot.rotation.y = -swing*0.35;
+        slingRoot.rotation.x = swing*0.22;
       } else {
         handRoot.position.x += (0.2-handRoot.position.x)*0.2;
         handRoot.position.y += (-0.34-handRoot.position.y)*0.2;
         handRoot.rotation.z += (-0.18-handRoot.rotation.z)*0.2;
         handRoot.rotation.x += (-0.08-handRoot.rotation.x)*0.2;
-        wandRoot.rotation.y += (0-wandRoot.rotation.y)*0.2;
-        wandRoot.rotation.x += (0-wandRoot.rotation.x)*0.2;
+        slingRoot.rotation.y += (0-slingRoot.rotation.y)*0.2;
+        slingRoot.rotation.x += (0-slingRoot.rotation.x)*0.2;
       }
 
       for(const n of npcs){
