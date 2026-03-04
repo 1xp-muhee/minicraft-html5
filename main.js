@@ -778,6 +778,7 @@ import { createProjectileMesh } from './projectiles.js';
     document.getElementById('hitBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); if(controlEnabled) castSpell(); }, {passive:false});
     document.getElementById('jumpBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); if(controlEnabled) move.jump=true; }, {passive:false});
     document.getElementById('ultBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); if(controlEnabled) consumeUltimate(); }, {passive:false});
+    document.getElementById('hireBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); if(controlEnabled) hireNpcGuard(); }, {passive:false});
 
     // mobile touch
     const stickBase = document.getElementById('stickBase'); const stickKnob = document.getElementById('stickKnob');
