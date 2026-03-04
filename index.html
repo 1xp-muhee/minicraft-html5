@@ -103,9 +103,61 @@
 
     const start = document.getElementById('start');
     const mobileHud = document.getElementById('mobileHud');
+
+    // Ambient fantasy BGM (UO Minoc-like mood, copyright-safe)
+    let bgmStarted = false;
+    function startAmbientBgm(){
+      if(bgmStarted) return;
+      bgmStarted = true;
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if(!AC) return;
+      const ac = new AC();
+      const master = ac.createGain();
+      master.gain.value = 0.07;
+      master.connect(ac.destination);
+
+      const notes = [
+        220.00, 246.94, 261.63, 293.66, 329.63, 293.66, 261.63, 246.94
+      ];
+      const bass = [110.00, 123.47, 130.81, 146.83];
+      let step = 0;
+
+      const tick = () => {
+        const t = ac.currentTime;
+
+        const pad = ac.createOscillator();
+        const padGain = ac.createGain();
+        pad.type = 'triangle';
+        pad.frequency.value = notes[step % notes.length];
+        padGain.gain.setValueAtTime(0.0001, t);
+        padGain.gain.exponentialRampToValueAtTime(0.04, t + 0.12);
+        padGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.95);
+        pad.connect(padGain).connect(master);
+        pad.start(t); pad.stop(t + 1.0);
+
+        if(step % 2 === 0){
+          const b = ac.createOscillator();
+          const bGain = ac.createGain();
+          b.type = 'sine';
+          b.frequency.value = bass[(step/2) % bass.length];
+          bGain.gain.setValueAtTime(0.0001, t);
+          bGain.gain.exponentialRampToValueAtTime(0.03, t + 0.04);
+          bGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+          b.connect(bGain).connect(master);
+          b.start(t); b.stop(t + 0.72);
+        }
+
+        step++;
+      };
+
+      tick();
+      setInterval(tick, 950);
+    }
+
     let controlEnabled = false;
     document.getElementById('startBtn').onclick = async () => {
       controlEnabled = true;
+      startAmbientBgm();
       start.style.display = 'none';
       if (isTouch) mobileHud.style.display = 'block';
       else await document.body.requestPointerLock?.();
