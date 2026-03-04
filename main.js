@@ -1040,7 +1040,7 @@ import { createProjectileMesh } from './projectiles.js';
             if(b.position.distanceTo(hitPos) < 0.65){
               if(n.userData.seated && !b.userData.ult){
                 awardScore(nick, -80);
-                setAlertText(n.userData.alertTag, '일하는중입니다');
+                setAlertText(n.userData.alertTag, '일하는 중입니다.');
                 n.userData.alertTag.visible = true;
                 n.userData.stunned = Math.max(n.userData.stunned || 0, 0.45);
               } else {
