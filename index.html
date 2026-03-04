@@ -85,7 +85,7 @@
     };
 
     document.addEventListener('pointerlockchange', ()=>{
-      if (!isTouch && document.pointerLockElement !== document.body && controlEnabled) {
+      if (!isTouch && document.pointerLockElement !== document.body && controlEnabled && document.activeElement !== chatInput) {
         start.style.display = 'flex'; controlEnabled = false;
       }
     });
@@ -184,6 +184,35 @@
     function netState(t){ netEl.textContent = t; }
     function logChat(t){ const d=document.createElement('div'); d.textContent=t; chatLog.appendChild(d); chatLog.scrollTop = chatLog.scrollHeight; }
     function sendAll(msg, except=null){ for(const c of conns){ if(c.open && c!==except) c.send(msg); } }
+    function isTyping(){ return document.activeElement === chatInput; }
+    function openChat(){
+      if(document.pointerLockElement===document.body) document.exitPointerLock?.();
+      chatInput.focus();
+    }
+    function closeChat(){
+      chatInput.blur();
+      if(controlEnabled && !isTouch) document.body.requestPointerLock?.();
+    }
+
+    function makeNameTag(name){
+      const cvs = document.createElement('canvas');
+      cvs.width = 256; cvs.height = 64;
+      const ctx = cvs.getContext('2d');
+      ctx.clearRect(0,0,cvs.width,cvs.height);
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(10,12,236,40);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 24px system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(name, 128, 32);
+      const tex = new THREE.CanvasTexture(cvs);
+      const mat = new THREE.SpriteMaterial({map:tex, transparent:true, depthTest:false});
+      const sp = new THREE.Sprite(mat);
+      sp.scale.set(2.3,0.58,1);
+      sp.position.set(0,2.55,0);
+      return sp;
+    }
 
     function colorFromId(id){
       let h=0; for(let i=0;i<id.length;i++) h = (h*31 + id.charCodeAt(i)) >>> 0;
@@ -192,12 +221,25 @@
     }
 
     function ensureRemote(id,name='guest'){
-      if(remotes.has(id)) return remotes.get(id);
+      if(remotes.has(id)){
+        const ex = remotes.get(id);
+        if(name && ex.userData.name !== name){
+          ex.userData.name = name;
+          if(ex.userData.tag) ex.remove(ex.userData.tag);
+          const tag = makeNameTag(name);
+          ex.add(tag);
+          ex.userData.tag = tag;
+        }
+        return ex;
+      }
       const g = new THREE.Group();
       const bodyColor = colorFromId(id);
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color:bodyColor})); body.position.y=0.95;
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xe7c29f})); head.position.y=1.8;
       g.add(body, head); g.userData.name = name;
+      const tag = makeNameTag(name);
+      g.add(tag);
+      g.userData.tag = tag;
       scene.add(g); remotes.set(id,g); return g;
     }
 
@@ -214,8 +256,17 @@
     function wireConn(conn){
       conns.push(conn);
       conn.on('data', (msg)=>{
-        if(msg?.type==='join'){ ensureRemote(conn.peer, msg.nick || 'guest'); if(isHost) sendAll({type:'join', from:conn.peer, nick:msg.nick||'guest'}, conn); }
-        if(msg?.type==='state'){ const m=ensureRemote(conn.peer); m.position.set(msg.s.x, msg.s.y-1.6, msg.s.z); m.rotation.y = msg.s.yaw; if(isHost) sendAll({type:'state', from:conn.peer, s:msg.s}, conn); }
+        const actorId = msg?.from || conn.peer;
+        if(msg?.type==='join'){
+          ensureRemote(actorId, msg.nick || 'guest');
+          if(isHost) sendAll({type:'join', from: actorId, nick: msg.nick || 'guest'}, conn);
+        }
+        if(msg?.type==='state'){
+          const m = ensureRemote(actorId, msg.nick || 'guest');
+          m.position.set(msg.s.x, msg.s.y-1.6, msg.s.z);
+          m.rotation.y = msg.s.yaw;
+          if(isHost) sendAll({type:'state', from: actorId, nick: msg.nick || 'guest', s: msg.s}, conn);
+        }
         if(msg?.type==='hitNpc'){ applyNpcHit(msg.id, msg.by); if(isHost) sendAll(msg, conn); }
         if(msg?.type==='chat'){ logChat(`${msg.nick}: ${msg.text}`); if(isHost) sendAll(msg, conn); }
       });
@@ -240,12 +291,15 @@
     initNet();
 
     chatInput.addEventListener('keydown', (e)=>{
+      if(e.key==='Escape'){ closeChat(); return; }
       if(e.key!=='Enter') return;
-      const text = chatInput.value.trim(); if(!text) return;
+      const text = chatInput.value.trim();
+      if(!text){ closeChat(); return; }
       chatInput.value='';
       const msg = {type:'chat', nick, text};
       logChat(`${nick}: ${text}`);
       sendAll(msg);
+      closeChat();
     });
 
     let yaw=0, pitch=0;
@@ -254,8 +308,18 @@
 
     const move = {f:false,b:false,l:false,r:false,run:false,jump:false};
     const vel = new THREE.Vector3(); let canJump=false;
-    const onKey=(d,e)=>{ if(e.code==='KeyW')move.f=d; if(e.code==='KeyS')move.b=d; if(e.code==='KeyA')move.l=d; if(e.code==='KeyD')move.r=d; if(e.code==='ShiftLeft')move.run=d; if(e.code==='Space'&&d)move.jump=true; };
-    addEventListener('keydown',e=>onKey(true,e)); addEventListener('keyup',e=>onKey(false,e));
+    const onKey=(d,e)=>{
+      if(e.type==='keydown' && e.code==='Enter' && !isTyping()){ e.preventDefault(); openChat(); return; }
+      if(isTyping()) return;
+      if(e.code==='KeyW')move.f=d;
+      if(e.code==='KeyS')move.b=d;
+      if(e.code==='KeyA')move.l=d;
+      if(e.code==='KeyD')move.r=d;
+      if(e.code==='ShiftLeft')move.run=d;
+      if(e.code==='Space'&&d)move.jump=true;
+    };
+    addEventListener('keydown',e=>onKey(true,e));
+    addEventListener('keyup',e=>onKey(false,e));
 
     function clampPlayer(p){ p.x=Math.max(-38,Math.min(38,p.x)); p.z=Math.max(-38,Math.min(38,p.z)); }
 
