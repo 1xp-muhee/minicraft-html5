@@ -76,18 +76,15 @@ import { createProjectileMesh } from './projectiles.js';
     };
 
     document.addEventListener('pointerlockchange', ()=>{
-      if (!isTouch && document.pointerLockElement !== document.body && controlEnabled && document.activeElement !== chatInput) {
+      if (!isTouch && document.pointerLockElement !== document.body && controlEnabled) {
         start.style.display = 'flex'; controlEnabled = false;
       }
     });
 
     if (isTouch) {
-      document.getElementById('controlsText').textContent = '왼쪽 조이스틱 이동 / 점프/필살기 버튼';
+      document.getElementById('controlsText').textContent = '왼쪽 조이스틱 이동 / 점프·필살기·고용 버튼';
       document.getElementById('lookText').innerHTML = '오른쪽 화면 드래그 시점 / 공격 버튼 <span class="danger">직원 때리기</span>';
-      // 모바일에서는 HUD 버튼 클릭이 가려지지 않도록 우측 패널 입력 차단
-      const chatWrap = document.getElementById('chatWrap');
       const leaderboard = document.getElementById('leaderboard');
-      if (chatWrap) chatWrap.style.pointerEvents = 'none';
       if (leaderboard) leaderboard.style.pointerEvents = 'none';
     }
 
@@ -483,11 +480,7 @@ import { createProjectileMesh } from './projectiles.js';
     const remoteGuards = new Map(); // guardId -> mesh
     const conns = [];
     let peer=null, isHost=false;
-    const chatLog = document.getElementById('chatLog');
-    const chatInput = document.getElementById('chatInput');
-
     function netState(t){ netEl.textContent = t; }
-    function logChat(t){ const d=document.createElement('div'); d.textContent=t; chatLog.appendChild(d); chatLog.scrollTop = chatLog.scrollHeight; }
     function showStatus(text){
       netEl.textContent = text;
       setTimeout(()=>{ if(netEl.textContent===text) netEl.textContent = isHost ? '호스트 온라인' : '참가 완료'; }, 1400);
@@ -500,16 +493,6 @@ import { createProjectileMesh } from './projectiles.js';
       g.rotation.y = msg.ry || 0;
       return g;
     }
-    function isTyping(){ return document.activeElement === chatInput; }
-    function openChat(){
-      if(document.pointerLockElement===document.body) document.exitPointerLock?.();
-      chatInput.focus();
-    }
-    function closeChat(){
-      chatInput.blur();
-      if(controlEnabled && !isTouch) document.body.requestPointerLock?.();
-    }
-
     function makeNameTag(name){
       const cvs = document.createElement('canvas');
       cvs.width = 256; cvs.height = 64;
@@ -711,7 +694,6 @@ import { createProjectileMesh } from './projectiles.js';
           for(const g of list){ upsertRemoteGuard(g); }
           if(isHost) sendAll(msg, conn);
         }
-        if(msg?.type==='chat'){ logChat(`${msg.nick}: ${msg.text}`); if(isHost) sendAll(msg, conn); }
       });
       conn.on('close', ()=>{ const m=remotes.get(conn.peer); if(m){scene.remove(m); remotes.delete(conn.peer);} });
     }
@@ -732,19 +714,6 @@ import { createProjectileMesh } from './projectiles.js';
       peer.on('error', (e)=>{ if(String(e?.type||'').includes('unavailable-id')){ try{peer.destroy();}catch{} netState('룸 참가 중...'); startClient(); } else netState('연결 오류'); });
     }
     initNet();
-
-    chatInput.addEventListener('keydown', (e)=>{
-      if(e.key==='Escape'){ closeChat(); return; }
-      if(e.key!=='Enter') return;
-      const text = chatInput.value.trim();
-      if(!text){ closeChat(); return; }
-      chatInput.value='';
-      const msg = {type:'chat', nick, text};
-      logChat(`${nick}: ${text}`);
-      sendAll(msg);
-      closeChat();
-    });
-
     let yaw=0, pitch=0;
     function applyLook(){ player.rotation.y = yaw; camera.rotation.x = pitch; }
     document.addEventListener('mousemove', (e)=>{ if(!controlEnabled || document.pointerLockElement!==document.body) return; yaw -= e.movementX*0.0024; pitch -= e.movementY*0.0024; pitch=Math.max(-1.3,Math.min(1.3,pitch)); applyLook(); });
@@ -752,8 +721,6 @@ import { createProjectileMesh } from './projectiles.js';
     const move = {f:false,b:false,l:false,r:false,run:false,jump:false};
     const vel = new THREE.Vector3(); let canJump=false;
     const onKey=(d,e)=>{
-      if(e.type==='keydown' && e.code==='Enter' && !isTyping()){ e.preventDefault(); openChat(); return; }
-      if(isTyping()) return;
       if(e.code==='KeyW')move.f=d;
       if(e.code==='KeyS')move.b=d;
       if(e.code==='KeyA')move.l=d;

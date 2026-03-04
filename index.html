@@ -19,10 +19,7 @@
     #hitBtn{bottom:22px}
     #jumpBtn{bottom:108px}
 
-    #chatWrap{position:fixed;right:10px;bottom:10px;z-index:16;width:280px;background:rgba(0,0,0,.42);border-radius:10px;color:#fff;overflow:hidden}
-    #chatLog{height:110px;overflow:auto;padding:8px;font-size:12px}
-    #chatInput{width:100%;box-sizing:border-box;border:none;outline:none;padding:8px;font-size:12px;background:rgba(255,255,255,.92)}
-    #leaderboard{position:fixed;right:10px;bottom:170px;z-index:16;width:280px;background:rgba(0,0,0,.45);color:#fff;border-radius:10px;padding:8px;font-size:12px}
+    #leaderboard{position:fixed;right:10px;bottom:10px;z-index:16;width:280px;background:rgba(0,0,0,.45);color:#fff;border-radius:10px;padding:8px;font-size:12px}
     #leaderboard h4{margin:0 0 6px 0;font-size:13px}
     #lbList{margin:0;padding-left:16px;max-height:140px;overflow:auto}
   </style>
@@ -53,11 +50,6 @@
   <div id="leaderboard">
     <h4>🏆 리더보드</h4>
     <ol id="lbList"></ol>
-  </div>
-
-  <div id="chatWrap">
-    <div id="chatLog"></div>
-    <input id="chatInput" placeholder="채팅 입력 후 Enter" />
   </div>
 
   <script type="module" src="./main.js"></script>
