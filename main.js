@@ -814,6 +814,20 @@ import { createProjectileMesh } from './projectiles.js';
       }
       return h;
     }
+
+    function moveActorWithPhysics(actor, dir, speed, dt){
+      if(!actor || !dir) return;
+      const d = dir.clone();
+      d.y = 0;
+      const len = d.length();
+      if(len <= 0.0001) return;
+      d.normalize();
+      actor.position.addScaledVector(d, speed * dt);
+      clampPlayer(actor.position);
+      const supportY = supportHeightAt(actor.position.x, actor.position.z, (actor.position.y || 0) + 1.6);
+      actor.position.y = Math.max(0, supportY - 1.6);
+      actor.rotation.y = Math.atan2(d.x, d.z);
+    }
     function spawnProjectile(p, d, weaponKey, ult, noHit=false){
       const {mesh, speed} = createProjectileMesh(THREE, weaponKey, ult);
       mesh.position.copy(p).addScaledVector(d, 0.55);
@@ -934,10 +948,7 @@ import { createProjectileMesh } from './projectiles.js';
           dir.y = 0;
           const dist = dir.length();
           if(dist > 0.01){
-            dir.normalize();
-            n.position.addScaledVector(dir, Math.min((n.userData.baseSpeed*1.5)*dt, dist));
-            n.position.y = 0;
-            n.rotation.y = Math.atan2(dir.x, dir.z);
+            moveActorWithPhysics(n, dir, Math.min(n.userData.baseSpeed*1.5, dist/Math.max(dt,0.001)), dt);
           }
           n.userData.gait += dt*11;
           n.userData.lLeg.rotation.x = Math.sin(n.userData.gait)*0.9;
@@ -988,9 +999,7 @@ import { createProjectileMesh } from './projectiles.js';
             n.userData.seated = true;
             n.userData.stateTimer = 2.0 + Math.random()*2.0;
           } else {
-            n.position.x += (dx/dist) * n.userData.speed * dt;
-            n.position.z += (dz/dist) * n.userData.speed * dt;
-            n.rotation.y = Math.atan2(dx, dz);
+            moveActorWithPhysics(n, new THREE.Vector3(dx,0,dz), n.userData.speed, dt);
           }
           n.userData.gait += dt*9;
           n.userData.lLeg.rotation.x = Math.sin(n.userData.gait)*0.8;
@@ -1039,9 +1048,7 @@ import { createProjectileMesh } from './projectiles.js';
             } else {
               const spd = n.userData.baseSpeed * 1.5;
               n.userData.speed = spd;
-              n.position.x += (dx/dist) * spd * dt;
-              n.position.z += (dz/dist) * spd * dt;
-              n.rotation.y = Math.atan2(dx, dz);
+              moveActorWithPhysics(n, new THREE.Vector3(dx,0,dz), spd, dt);
             }
           } else {
             n.userData.moveTimer -= dt;
@@ -1050,9 +1057,8 @@ import { createProjectileMesh } from './projectiles.js';
               n.userData.turnTimer=0.6+Math.random()*2.5;
               n.userData.dir.set(Math.random()*2-1,0,Math.random()*2-1).normalize();
             }
-            n.position.addScaledVector(n.userData.dir,n.userData.speed*dt);
+            moveActorWithPhysics(n, n.userData.dir, n.userData.speed, dt);
             avoidWallsOrTurn(n);
-            n.rotation.y=Math.atan2(n.userData.dir.x,n.userData.dir.z);
 
             if(n.userData.moveTimer <= 0){
               n.userData.seated = true;
@@ -1114,14 +1120,9 @@ import { createProjectileMesh } from './projectiles.js';
         const dir = tp2.sub(hp2);
         const dist = dir.length();
         if(dist > 0.01){
-          dir.normalize();
           const spd = h.userData.carrying ? (h.userData.guardSpeed||3.0)*1.25 : (h.userData.guardSpeed||3.0);
-          h.position.addScaledVector(dir, Math.min(spd*dt, dist));
-          h.rotation.y = Math.atan2(dir.x, dir.z);
+          moveActorWithPhysics(h, dir, Math.min(spd, dist/Math.max(dt,0.001)), dt);
         }
-        // allow guards to climb stairs/platforms too
-        const guardSupportY = supportHeightAt(h.position.x, h.position.z, h.position.y || 1.6);
-        h.position.y = Math.max(0, guardSupportY - 1.6);
 
         h.userData.lastAtk += dt;
         const vGap = target ? Math.abs((target.position.y||0) - (h.position.y||0)) : 999;
