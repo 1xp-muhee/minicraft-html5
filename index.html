@@ -3,40 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MiniCraft HTML5</title>
+  <title>OfficeCraft: Employee Mayhem</title>
   <style>
-    html, body { margin:0; width:100%; height:100%; overflow:hidden; background:#87ceeb; font-family:system-ui, sans-serif; }
-    #ui {
-      position: fixed; top: 10px; left: 10px; color: white; z-index: 10;
-      background: rgba(0,0,0,0.35); padding: 10px 12px; border-radius: 10px;
-      backdrop-filter: blur(3px); font-size: 13px; line-height: 1.45;
-    }
-    #crosshair {
-      position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
-      color: white; font-size: 22px; user-select: none; z-index: 10;
-      text-shadow: 0 0 6px rgba(0,0,0,.8);
-    }
-    #start {
-      position: fixed; inset: 0; display:flex; align-items:center; justify-content:center;
-      background: rgba(0,0,0,.55); color: white; z-index: 20; text-align:center;
-    }
-    #start button { font-size:18px; padding: 14px 20px; border:none; border-radius:10px; cursor:pointer; }
-    .chip { display:inline-block; margin:2px 4px 0 0; padding:2px 8px; border-radius:999px; background:rgba(255,255,255,.18); }
+    html, body { margin:0; width:100%; height:100%; overflow:hidden; background:#cdd7e1; font-family:system-ui,sans-serif; }
+    #ui{position:fixed;left:10px;top:10px;z-index:10;color:#fff;background:rgba(0,0,0,.45);padding:10px 12px;border-radius:10px;font-size:13px;line-height:1.45}
+    #cross{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:10;color:#fff;font-size:22px;text-shadow:0 0 6px #000}
+    #start{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;background:rgba(0,0,0,.55)}
+    #start button{font-size:18px;padding:14px 22px;border:none;border-radius:10px;cursor:pointer}
+    .danger{color:#ff8080;font-weight:700}
   </style>
 </head>
 <body>
   <div id="ui">
-    <div><strong>MiniCraft HTML5</strong></div>
+    <div><strong>OfficeCraft: Employee Mayhem</strong></div>
     <div>WASD 이동 / Space 점프 / Shift 달리기</div>
-    <div>마우스: 시점 / 좌클릭: 블록 제거 / 우클릭: 블록 설치</div>
-    <div>숫자키 1~3 블록 선택</div>
-    <div style="margin-top:6px">
-      <span class="chip">1 잔디</span>
-      <span class="chip">2 흙</span>
-      <span class="chip">3 돌</span>
-    </div>
+    <div>마우스 시점 / 좌클릭 <span class="danger">직원 때리기</span></div>
+    <div>점수: <span id="score">0</span> | 직원 수: <span id="alive">0</span></div>
   </div>
-  <div id="crosshair">+</div>
+  <div id="cross">+</div>
   <div id="start"><button id="startBtn">클릭해서 시작</button></div>
 
   <script type="module">
@@ -44,178 +28,193 @@
     import { PointerLockControls } from 'https://esm.sh/three@0.160.0/examples/jsm/controls/PointerLockControls.js';
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87ceeb);
-    scene.fog = new THREE.Fog(0x87ceeb, 20, 90);
+    scene.background = new THREE.Color(0xcdd7e1);
+    scene.fog = new THREE.Fog(0xcdd7e1, 20, 120);
 
-    const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 200);
-    camera.position.set(0, 4, 8);
+    const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 250);
+    camera.position.set(0, 3, 8);
 
-    const renderer = new THREE.WebGLRenderer({ antialias:true });
+    const renderer = new THREE.WebGLRenderer({antialias:true});
     renderer.setSize(innerWidth, innerHeight);
     renderer.setPixelRatio(devicePixelRatio);
     renderer.shadowMap.enabled = true;
     document.body.appendChild(renderer.domElement);
 
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x667788, 0.8);
-    scene.add(hemi);
-
-    const sun = new THREE.DirectionalLight(0xffffff, 0.9);
-    sun.position.set(20, 40, 10);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048,2048);
-    scene.add(sun);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x8ea0b2, 0.75));
+    const d = new THREE.DirectionalLight(0xffffff, 0.9);
+    d.position.set(20,40,10); d.castShadow = true; d.shadow.mapSize.set(2048,2048); scene.add(d);
 
     const controls = new PointerLockControls(camera, document.body);
     scene.add(controls.getObject());
-
     const start = document.getElementById('start');
     document.getElementById('startBtn').onclick = () => controls.lock();
-    controls.addEventListener('lock', () => start.style.display='none');
-    controls.addEventListener('unlock', () => start.style.display='flex');
+    controls.addEventListener('lock', ()=>start.style.display='none');
+    controls.addEventListener('unlock', ()=>start.style.display='flex');
 
-    const blockSize = 1;
-    const world = new Map();
-    const blocks = [];
-    const group = new THREE.Group();
-    scene.add(group);
+    // Office floor & walls
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(80,1,80), new THREE.MeshStandardMaterial({color:0xbfc7d1}));
+    floor.position.y = -0.5; floor.receiveShadow = true; scene.add(floor);
 
-    const boxGeo = new THREE.BoxGeometry(blockSize, blockSize, blockSize);
-    const matGrass = new THREE.MeshStandardMaterial({ color: 0x49b14a });
-    const matDirt  = new THREE.MeshStandardMaterial({ color: 0x8b5a2b });
-    const matStone = new THREE.MeshStandardMaterial({ color: 0x8a8f98 });
-    const mats = [matGrass, matDirt, matStone];
-    let selected = 0;
-
-    const key = (x,y,z)=>`${x}|${y}|${z}`;
-    const snap = (v)=>Math.round(v / blockSize) * blockSize;
-
-    function addBlock(x,y,z,type=0){
-      const k = key(x,y,z);
-      if(world.has(k)) return;
-      const m = new THREE.Mesh(boxGeo, mats[type] || mats[0]);
-      m.position.set(x,y,z);
-      m.castShadow = true;
-      m.receiveShadow = true;
-      m.userData = {x,y,z,type};
-      world.set(k, m);
-      blocks.push(m);
-      group.add(m);
+    function wall(x,y,z,w,h,d,col=0xe8edf2){
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshStandardMaterial({color:col}));
+      m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true; scene.add(m); return m;
     }
+    wall(0,2,-40,80,5,1); wall(0,2,40,80,5,1); wall(-40,2,0,1,5,80); wall(40,2,0,1,5,80);
 
-    function removeBlock(mesh){
-      const {x,y,z} = mesh.userData;
-      world.delete(key(x,y,z));
-      const i = blocks.indexOf(mesh);
-      if(i>=0) blocks.splice(i,1);
-      group.remove(mesh);
+    // Desk grid
+    const solids = [];
+    function desk(x,z){
+      const top = new THREE.Mesh(new THREE.BoxGeometry(3,0.25,2), new THREE.MeshStandardMaterial({color:0x8d6e63}));
+      top.position.set(x,1.2,z); top.castShadow=true; top.receiveShadow=true; scene.add(top); solids.push(top);
+      const legGeo = new THREE.BoxGeometry(0.2,1.1,0.2);
+      const legMat = new THREE.MeshStandardMaterial({color:0x555});
+      [[1.3,0.6,0.8],[-1.3,0.6,0.8],[1.3,0.6,-0.8],[-1.3,0.6,-0.8]].forEach(([lx,ly,lz])=>{
+        const leg = new THREE.Mesh(legGeo, legMat);
+        leg.position.set(x+lx,ly,z+lz); leg.castShadow=true; leg.receiveShadow=true; scene.add(leg); solids.push(leg);
+      });
+      const pc = new THREE.Mesh(new THREE.BoxGeometry(0.9,0.6,0.08), new THREE.MeshStandardMaterial({color:0x202225}));
+      pc.position.set(x,1.65,z-0.45); scene.add(pc); solids.push(pc);
     }
-
-    // Flat terrain + small hill
-    for(let x=-25; x<=25; x++){
-      for(let z=-25; z<=25; z++){
-        addBlock(x,0,z,0);
-        if ((x*x + z*z) < 50 && Math.random() > 0.6) addBlock(x,1,z,1);
+    for(let gx=-24; gx<=24; gx+=8){
+      for(let gz=-24; gz<=24; gz+=8){
+        if(Math.random()>0.18) desk(gx,gz);
       }
     }
 
+    // NPC employees
+    const npcs = [];
+    const npcGroup = new THREE.Group(); scene.add(npcGroup);
     const raycaster = new THREE.Raycaster();
 
-    function getLookHit(){
-      raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
-      const hits = raycaster.intersectObjects(blocks, false);
-      return hits[0] || null;
+    function makeNPC(x,z){
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color:0x4f79d8}));
+      body.position.y = 0.95;
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xf0c7a4}));
+      head.position.y = 1.8;
+      g.add(body, head);
+      g.position.set(x,0,z);
+      g.castShadow = true;
+      g.userData = {
+        hp: 3,
+        speed: 0.9 + Math.random()*0.8,
+        dir: new THREE.Vector3(Math.random()*2-1,0,Math.random()*2-1).normalize(),
+        turnTimer: 0.8 + Math.random()*2.2,
+        dead:false
+      };
+      npcGroup.add(g);
+      npcs.push(g);
     }
 
-    window.addEventListener('contextmenu', (e)=>e.preventDefault());
-    window.addEventListener('mousedown', (e)=>{
-      if(!controls.isLocked) return;
-      const hit = getLookHit();
-      if(!hit) return;
-
-      if(e.button === 0){
-        // remove
-        if(hit.object.userData.y <= 0) return; // keep ground base
-        removeBlock(hit.object);
-      } else if(e.button === 2){
-        // place adjacent block
-        const p = hit.point.clone().add(hit.face.normal.clone().multiplyScalar(0.5));
-        const x = snap(p.x), y = snap(p.y), z = snap(p.z);
-        const playerPos = controls.getObject().position;
-        if(Math.abs(playerPos.x-x)<0.8 && Math.abs(playerPos.y-y)<1.8 && Math.abs(playerPos.z-z)<0.8) return;
-        addBlock(x,y,z,selected);
+    function spawnNPCs(n=18){
+      for(let i=0;i<n;i++){
+        const x = (Math.random()*60)-30;
+        const z = (Math.random()*60)-30;
+        makeNPC(x,z);
       }
-    });
+      updateAlive();
+    }
+    spawnNPCs();
 
-    window.addEventListener('keydown', (e)=>{
-      if(e.code==='Digit1') selected = 0;
-      if(e.code==='Digit2') selected = 1;
-      if(e.code==='Digit3') selected = 2;
-    });
+    const scoreEl = document.getElementById('score');
+    const aliveEl = document.getElementById('alive');
+    let score = 0;
+    function updateAlive(){ aliveEl.textContent = npcs.filter(n=>!n.userData.dead).length; }
 
-    // Simple FPS-like movement + gravity
-    const velocity = new THREE.Vector3();
-    const direction = new THREE.Vector3();
-    const move = {f:false,b:false,l:false,r:false,jump:false,run:false};
-    let canJump = false;
-
-    const onKey = (d, e)=>{
+    // Controls
+    const vel = new THREE.Vector3();
+    const dir = new THREE.Vector3();
+    const move = {f:false,b:false,l:false,r:false,run:false};
+    let canJump=false;
+    const onKey=(d,e)=>{
       switch(e.code){
-        case 'KeyW': move.f = d; break;
-        case 'KeyS': move.b = d; break;
-        case 'KeyA': move.l = d; break;
-        case 'KeyD': move.r = d; break;
-        case 'ShiftLeft': move.run = d; break;
-        case 'Space':
-          if(d && canJump){ velocity.y = 7.5; canJump = false; }
-          break;
+        case 'KeyW': move.f=d; break; case 'KeyS': move.b=d; break;
+        case 'KeyA': move.l=d; break; case 'KeyD': move.r=d; break;
+        case 'ShiftLeft': move.run=d; break;
+        case 'Space': if(d&&canJump){ vel.y=7.2; canJump=false; } break;
       }
     };
-    addEventListener('keydown', (e)=>onKey(true,e));
-    addEventListener('keyup', (e)=>onKey(false,e));
+    addEventListener('keydown',e=>onKey(true,e));
+    addEventListener('keyup',e=>onKey(false,e));
 
-    function groundHeightAt(x,z){
-      // crude collision: find highest block center + 0.5 near position
-      const sx = snap(x), sz = snap(z);
-      for(let y=20; y>=-5; y--){
-        if(world.has(key(sx,y,sz))) return y + 1.5;
+    function clampPlayer(p){
+      p.x = Math.max(-38, Math.min(38,p.x));
+      p.z = Math.max(-38, Math.min(38,p.z));
+    }
+
+    function hitNPC(){
+      raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+      const aliveNPCs = npcs.filter(n=>!n.userData.dead);
+      const hits = raycaster.intersectObjects(aliveNPCs, true);
+      if(!hits.length) return;
+      const targetRoot = hits[0].object.parent;
+      if(hits[0].distance > 4) return;
+      targetRoot.userData.hp -= 1;
+      targetRoot.position.y = 0.12;
+      setTimeout(()=>{ if(!targetRoot.userData.dead) targetRoot.position.y = 0; }, 80);
+      if(targetRoot.userData.hp <= 0){
+        targetRoot.userData.dead = true;
+        targetRoot.visible = false;
+        score += 100;
+        scoreEl.textContent = score;
+        updateAlive();
       }
-      return -100;
+    }
+
+    addEventListener('mousedown', (e)=>{
+      if(!controls.isLocked) return;
+      if(e.button===0) hitNPC();
+    });
+
+    function avoidWallsOrTurn(n){
+      if(Math.abs(n.position.x) > 36 || Math.abs(n.position.z) > 36){
+        n.userData.dir.multiplyScalar(-1);
+      }
+      if(Math.random() < 0.008){
+        n.userData.dir.set(Math.random()*2-1,0,Math.random()*2-1).normalize();
+      }
     }
 
     let prev = performance.now();
     function animate(){
       requestAnimationFrame(animate);
       const now = performance.now();
-      const dt = Math.min((now - prev)/1000, 0.05);
+      const dt = Math.min((now-prev)/1000, 0.05);
       prev = now;
 
       if(controls.isLocked){
-        const speed = move.run ? 9.5 : 6.0;
-        direction.set(0,0,0);
-        if(move.f) direction.z -= 1;
-        if(move.b) direction.z += 1;
-        if(move.l) direction.x -= 1;
-        if(move.r) direction.x += 1;
-        direction.normalize();
+        const speed = move.run ? 9.3 : 6.1;
+        dir.set(0,0,0);
+        if(move.f) dir.z -= 1; if(move.b) dir.z += 1;
+        if(move.l) dir.x -= 1; if(move.r) dir.x += 1;
+        dir.normalize();
 
-        velocity.x = direction.x * speed;
-        velocity.z = direction.z * speed;
-        velocity.y -= 18 * dt; // gravity
+        vel.x = dir.x * speed;
+        vel.z = dir.z * speed;
+        vel.y -= 18 * dt;
 
-        controls.moveRight(velocity.x * dt);
-        controls.moveForward(-velocity.z * dt);
-        controls.getObject().position.y += velocity.y * dt;
-
+        controls.moveRight(vel.x * dt);
+        controls.moveForward(-vel.z * dt);
+        controls.getObject().position.y += vel.y * dt;
         const p = controls.getObject().position;
-        const floor = groundHeightAt(p.x, p.z);
-        if(p.y < floor){
-          p.y = floor;
-          velocity.y = 0;
-          canJump = true;
-        }
+        if(p.y < 1.6){ p.y = 1.6; vel.y = 0; canJump = true; }
+        clampPlayer(p);
       }
 
-      renderer.render(scene, camera);
+      // NPC wandering
+      for(const n of npcs){
+        if(n.userData.dead) continue;
+        n.userData.turnTimer -= dt;
+        if(n.userData.turnTimer <= 0){
+          n.userData.turnTimer = 0.6 + Math.random()*2.5;
+          n.userData.dir.set(Math.random()*2-1,0,Math.random()*2-1).normalize();
+        }
+        n.position.addScaledVector(n.userData.dir, n.userData.speed*dt);
+        avoidWallsOrTurn(n);
+        n.rotation.y = Math.atan2(n.userData.dir.x, n.userData.dir.z);
+      }
+
+      renderer.render(scene,camera);
     }
     animate();
 
