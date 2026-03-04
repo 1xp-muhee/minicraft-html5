@@ -63,6 +63,7 @@ import { createProjectileMesh } from './projectiles.js';
     wall(0,2,-40,80,5,1); wall(0,2,40,80,5,1); wall(-40,2,0,1,5,80); wall(40,2,0,1,5,80);
 
     const deskSeats = [];
+    const deskSurfaces = [];
     function desk(x,z){
       const top = new THREE.Mesh(new THREE.BoxGeometry(3,0.25,2), new THREE.MeshStandardMaterial({color:0x8d6e63}));
       top.position.set(x,1.2,z); top.castShadow=true; top.receiveShadow=true; scene.add(top);
@@ -70,6 +71,12 @@ import { createProjectileMesh } from './projectiles.js';
       [[1.3,0.6,0.8],[-1.3,0.6,0.8],[1.3,0.6,-0.8],[-1.3,0.6,-0.8]].forEach(([lx,ly,lz])=>{ const leg = new THREE.Mesh(legGeo, legMat); leg.position.set(x+lx,ly,z+lz); leg.castShadow=true; leg.receiveShadow=true; scene.add(leg); });
       const pc = new THREE.Mesh(new THREE.BoxGeometry(0.9,0.6,0.08), new THREE.MeshStandardMaterial({color:0x202225}));
       pc.position.set(x,1.65,z-0.45); scene.add(pc);
+
+      deskSurfaces.push({
+        minX: x - 1.5, maxX: x + 1.5,
+        minZ: z - 1.0, maxZ: z + 1.0,
+        topY: 1.325 // desk top world y
+      });
 
       const tasks = ['매출 리포트 작성','고객 문의 처리','주간 KPI 정리','QA 버그 검토','재고 발주 확인','회의록 작성'];
       const txt = tasks[Math.floor(Math.random()*tasks.length)];
@@ -460,6 +467,17 @@ import { createProjectileMesh } from './projectiles.js';
     addEventListener('keyup',e=>onKey(false,e));
 
     function clampPlayer(p){ p.x=Math.max(-38,Math.min(38,p.x)); p.z=Math.max(-38,Math.min(38,p.z)); }
+    function supportHeightAt(x, z, currentY){
+      let h = 1.6; // floor eye height
+      for(const s of deskSurfaces){
+        if(x>=s.minX && x<=s.maxX && z>=s.minZ && z<=s.maxZ){
+          const deskEyeY = s.topY + 1.6;
+          // only snap when near/above desk to avoid pulling from below
+          if(currentY >= deskEyeY - 0.45) h = Math.max(h, deskEyeY);
+        }
+      }
+      return h;
+    }
     function spawnProjectile(p, d, weaponKey, ult, noHit=false){
       const {mesh, speed} = createProjectileMesh(THREE, weaponKey, ult);
       mesh.position.copy(p).addScaledVector(d, 0.55);
@@ -522,7 +540,8 @@ import { createProjectileMesh } from './projectiles.js';
         if(move.jump&&canJump){ vel.y=7.2; canJump=false; }
         move.jump=false;
         player.position.y += vel.y*dt;
-        if(player.position.y<1.6){ player.position.y=1.6; vel.y=0; canJump=true; }
+        const supportY = supportHeightAt(player.position.x, player.position.z, player.position.y);
+        if(player.position.y < supportY){ player.position.y = supportY; vel.y = 0; canJump = true; }
         clampPlayer(player.position);
       }
 
