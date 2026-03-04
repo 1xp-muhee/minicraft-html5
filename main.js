@@ -546,15 +546,15 @@ import { createAmbientBgmStarter } from './audio.js';
         handRoot.position.y = -0.34 - swing*0.04;
         handRoot.rotation.z = -0.18 - swing*0.45;
         handRoot.rotation.x = -0.08 - swing*0.22;
-        slingRoot.rotation.y = -swing*0.35;
-        slingRoot.rotation.x = swing*0.22;
+        weaponRoot.rotation.y = -swing*0.35;
+        weaponRoot.rotation.x = swing*0.22;
       } else {
         handRoot.position.x += (0.2-handRoot.position.x)*0.2;
         handRoot.position.y += (-0.34-handRoot.position.y)*0.2;
         handRoot.rotation.z += (-0.18-handRoot.rotation.z)*0.2;
         handRoot.rotation.x += (-0.08-handRoot.rotation.x)*0.2;
-        slingRoot.rotation.y += (0-slingRoot.rotation.y)*0.2;
-        slingRoot.rotation.x += (0-slingRoot.rotation.x)*0.2;
+        weaponRoot.rotation.y += (0-weaponRoot.rotation.y)*0.2;
+        weaponRoot.rotation.x += (0-weaponRoot.rotation.x)*0.2;
       }
 
       for(const n of npcs){
