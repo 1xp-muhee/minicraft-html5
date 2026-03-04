@@ -286,10 +286,14 @@
       const g = new THREE.Group();
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color:0x4f79d8})); body.position.y = 0.8;
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xf0c7a4})); head.position.y = 1.55;
-      g.add(body, head); g.position.set(x,0,z);
+      const legMat = new THREE.MeshStandardMaterial({color:0x2f3740});
+      const lLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.65,0.22), legMat); lLeg.position.set(-0.16,0.22,0);
+      const rLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.65,0.22), legMat); rLeg.position.set(0.16,0.22,0);
+      g.add(body, head, lLeg, rLeg); g.position.set(x,0,z);
       const seat = opts.seat || deskSeats[Math.floor(Math.random()*deskSeats.length)] || {x, z};
       g.userData = {
         id, hp:3,
+        lLeg, rLeg, gait: Math.random()*Math.PI*2,
         speed:0.9+Math.random()*0.8,
         dir:new THREE.Vector3(Math.random()*2-1,0,Math.random()*2-1).normalize(),
         turnTimer:0.8+Math.random()*2.2,
@@ -436,11 +440,13 @@
       const bodyColor = colorFromId(id);
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color:bodyColor})); body.position.y=0.95;
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xe7c29f})); head.position.y=1.8;
+      const lLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.65,0.22), new THREE.MeshStandardMaterial({color:0x2f3740})); lLeg.position.set(-0.16,0.3,0);
+      const rLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.65,0.22), new THREE.MeshStandardMaterial({color:0x2f3740})); rLeg.position.set(0.16,0.3,0);
       const remoteWeapon = weaponCatalog.slingshot;
       const wep = new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,remoteWeapon.len,8), new THREE.MeshStandardMaterial({color:remoteWeapon.color}));
       wep.position.set(0.45,1.1,0.08);
       wep.rotation.z = -0.9;
-      g.add(body, head, wep); g.userData.name = name;
+      g.add(body, head, lLeg, rLeg, wep); g.userData.name = name; g.userData.lLeg = lLeg; g.userData.rLeg = rLeg; g.userData.moveSpeed = 0; g.userData.gait = Math.random()*Math.PI*2;
       const tag = makeNameTag(name);
       g.add(tag);
       g.userData.tag = tag;
@@ -470,8 +476,11 @@
         if(msg?.type==='state'){
           const actorNick = msg.nick || 'guest';
           const m = ensureRemote(actorId, actorNick);
+          const prevX = m.position.x, prevZ = m.position.z;
           m.position.set(msg.s.x, msg.s.y-1.6, msg.s.z);
           m.rotation.y = msg.s.yaw;
+          const d2 = Math.hypot(m.position.x-prevX, m.position.z-prevZ);
+          m.userData.moveSpeed = d2;
           if(typeof msg.score === 'number'){ scores.set(actorNick, msg.score); renderLeaderboard(); }
           if(isHost) sendAll({type:'state', from: actorId, nick: actorNick, s: msg.s, score: msg.score}, conn);
         }
@@ -648,6 +657,9 @@
             n.position.z += (dz/dist) * n.userData.speed * dt;
             n.rotation.y = Math.atan2(dx, dz);
           }
+          n.userData.gait += dt*9;
+          n.userData.lLeg.rotation.x = Math.sin(n.userData.gait)*0.8;
+          n.userData.rLeg.rotation.x = -Math.sin(n.userData.gait)*0.8;
           continue;
         }
 
@@ -657,6 +669,8 @@
           n.position.x += (n.userData.seatX - n.position.x) * 0.08;
           n.position.z += (n.userData.seatZ - n.position.z) * 0.08;
           n.rotation.y += (0 - n.rotation.y) * 0.08;
+          n.userData.lLeg.rotation.x *= 0.75;
+          n.userData.rLeg.rotation.x *= 0.75;
           if(n.userData.stateTimer <= 0){
             n.userData.stateTimer = 2.0 + Math.random()*2.0;
             if(Math.random() < 0.30){
@@ -676,11 +690,24 @@
           n.position.addScaledVector(n.userData.dir,n.userData.speed*dt);
           avoidWallsOrTurn(n);
           n.rotation.y=Math.atan2(n.userData.dir.x,n.userData.dir.z);
+          n.userData.gait += dt*10;
+          n.userData.lLeg.rotation.x = Math.sin(n.userData.gait)*0.85;
+          n.userData.rLeg.rotation.x = -Math.sin(n.userData.gait)*0.85;
 
           if(n.userData.moveTimer <= 0){
             n.userData.seated = true;
             n.userData.stateTimer = 2.0 + Math.random()*2.0;
           }
+        }
+      }
+
+      for(const m of remotes.values()){
+        const sp = m.userData.moveSpeed || 0;
+        m.userData.gait = (m.userData.gait || 0) + Math.min(0.25, sp*35);
+        const amp = Math.min(0.9, sp*28);
+        if(m.userData.lLeg && m.userData.rLeg){
+          m.userData.lLeg.rotation.x = Math.sin(m.userData.gait)*amp;
+          m.userData.rLeg.rotation.x = -Math.sin(m.userData.gait)*amp;
         }
       }
 
