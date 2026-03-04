@@ -167,11 +167,12 @@ import { createProjectileMesh } from './projectiles.js';
         // high steps get closer to tower center (climb toward tower)
         const x = base.x + dir*(11.8 - i*0.58);
         const z = base.z;
-        const step = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.42, 2.6), stairMat2);
+        const step = new THREE.Mesh(new THREE.BoxGeometry(1.14, 0.42, 2.9), stairMat2);
         step.position.set(x, y, z);
         step.castShadow = true; step.receiveShadow = true;
         scene.add(step);
-        towerSurfaces.push({ minX:x-0.39, maxX:x+0.39, minZ:z-1.3, maxZ:z+1.3, topY:y+0.21 });
+        // overlap collision boxes to avoid falling between steps
+        towerSurfaces.push({ minX:x-0.57, maxX:x+0.57, minZ:z-1.45, maxZ:z+1.45, topY:y+0.21 });
       }
     }
     addTeamTowerStairs(teamBases.blue, +1);
@@ -719,8 +720,8 @@ import { createProjectileMesh } from './projectiles.js';
       for(const s of allSurfaces){
         if(x>=s.minX && x<=s.maxX && z>=s.minZ && z<=s.maxZ){
           const eyeY = s.topY + 1.6;
-          // only snap when near/above platform to avoid pulling from below
-          if(currentY >= eyeY - 0.5) h = Math.max(h, eyeY);
+          // relaxed snap threshold for stairs to reduce slipping
+          if(currentY >= eyeY - 1.2) h = Math.max(h, eyeY);
         }
       }
       return h;
@@ -1008,12 +1009,16 @@ import { createProjectileMesh } from './projectiles.js';
           targetPos = h.userData.carrying ? homeBase : enemyBase;
         }
 
-        const dir = targetPos.clone().sub(h.position);
+        h.position.y = 0;
+        const hp = h.position.clone(); hp.y = 0;
+        const tp = targetPos.clone(); tp.y = 0;
+        const dir = tp.sub(hp);
         const dist = dir.length();
         if(dist > 0.01){
           dir.normalize();
           const spd = h.userData.carrying ? 3.8 : 3.0;
           h.position.addScaledVector(dir, Math.min(spd*dt, dist));
+          h.position.y = 0;
           h.rotation.y = Math.atan2(dir.x, dir.z);
         }
 
