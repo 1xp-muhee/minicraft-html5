@@ -191,6 +191,26 @@ import { createProjectileMesh } from './projectiles.js';
     const npcGroup = new THREE.Group(); scene.add(npcGroup);
     const raycaster = new THREE.Raycaster();
 
+    function makeAlertTag(){
+      const cvs = document.createElement('canvas');
+      cvs.width = 128; cvs.height = 128;
+      const ctx = cvs.getContext('2d');
+      ctx.clearRect(0,0,128,128);
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.beginPath(); ctx.arc(64,64,36,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#ffde59';
+      ctx.font = 'bold 72px system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('!', 64, 70);
+      const tex = new THREE.CanvasTexture(cvs);
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true, depthTest:false}));
+      sp.scale.set(0.9,0.9,1);
+      sp.position.set(0,2.45,0);
+      sp.visible = false;
+      return sp;
+    }
+
     function makeNPC(x,z,id,opts={}){
       const g = new THREE.Group();
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color:0x4f79d8})); body.position.y = 0.8;
@@ -222,12 +242,14 @@ import { createProjectileMesh } from './projectiles.js';
       const legMat = new THREE.MeshStandardMaterial({color:0x2f3740});
       const lLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.65,0.22), legMat); lLeg.position.set(-0.16,0.22,0);
       const rLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.65,0.22), legMat); rLeg.position.set(0.16,0.22,0);
-      g.add(body, head, hair, eWL, eWR, ePL, ePR, lLeg, rLeg); g.position.set(x,0,z);
+      const alertTag = makeAlertTag();
+      g.add(body, head, hair, eWL, eWR, ePL, ePR, lLeg, rLeg, alertTag); g.position.set(x,0,z);
       const seat = opts.seat || deskSeats[Math.floor(Math.random()*deskSeats.length)] || {x, z};
+      const baseSpeed = 0.9+Math.random()*0.8;
       g.userData = {
         id, hp:3,
-        lLeg, rLeg, eyeL:ePL, eyeR:ePR, gait: Math.random()*Math.PI*2,
-        speed:0.9+Math.random()*0.8,
+        lLeg, rLeg, eyeL:ePL, eyeR:ePR, alertTag, gait: Math.random()*Math.PI*2,
+        speed:baseSpeed, baseSpeed,
         dir:new THREE.Vector3(Math.random()*2-1,0,Math.random()*2-1).normalize(),
         turnTimer:0.8+Math.random()*2.2,
         dead:false,
@@ -235,6 +257,8 @@ import { createProjectileMesh } from './projectiles.js';
         seated: opts.seated ?? true,
         entering: opts.entering ?? false,
         willLeave: Math.random() < 0.30,
+        stunned: 0,
+        panicReturn: false,
         stateTimer: 2.0 + Math.random()*2.0,
         moveTimer: 0
       };
@@ -405,6 +429,13 @@ import { createProjectileMesh } from './projectiles.js';
       const npc = npcById.get(id); if(!npc || npc.userData.dead) return false;
       npc.userData.hp -= damage; npc.position.y = 0.12; setTimeout(()=>{ if(!npc.userData.dead) npc.position.y=0; }, 80);
       spawnHitFx(npc.position.clone().add(new THREE.Vector3(0,1.3,0)), fxMult);
+
+      if(!npc.userData.seated || npc.userData.entering){
+        npc.userData.stunned = 1.0;
+        npc.userData.panicReturn = true;
+        npc.userData.alertTag.visible = true;
+      }
+
       if(npc.userData.hp <= 0){
         npc.userData.dead = true; npc.visible = false; updateAlive();
         return true;
@@ -639,6 +670,24 @@ import { createProjectileMesh } from './projectiles.js';
       for(const n of npcs){
         if(n.userData.dead) continue;
 
+        if(n.userData.stunned > 0){
+          n.userData.stunned -= dt;
+          n.userData.alertTag.visible = true;
+          n.rotation.z = 0.45;
+          n.userData.lLeg.rotation.x *= 0.6;
+          n.userData.rLeg.rotation.x *= 0.6;
+          if(n.userData.stunned <= 0){
+            n.rotation.z = 0;
+            n.userData.alertTag.visible = false;
+            if(n.userData.panicReturn){
+              n.userData.seated = false;
+              n.userData.entering = false;
+              n.userData.moveTimer = 999;
+            }
+          }
+          continue;
+        }
+
         if(n.userData.entering){
           const dx = n.userData.seatX - n.position.x;
           const dz = n.userData.seatZ - n.position.z;
@@ -663,6 +712,7 @@ import { createProjectileMesh } from './projectiles.js';
         n.userData.stateTimer -= dt;
         if(n.userData.seated){
           // 기본: 자리에서 근무
+          n.userData.speed = n.userData.baseSpeed;
           n.position.x += (n.userData.seatX - n.position.x) * 0.08;
           n.position.z += (n.userData.seatZ - n.position.z) * 0.08;
           n.rotation.y += (0 - n.rotation.y) * 0.08;
@@ -686,25 +736,44 @@ import { createProjectileMesh } from './projectiles.js';
           }
         } else {
           // 자리 이탈 후 이동
-          n.userData.moveTimer -= dt;
-          n.userData.turnTimer -= dt;
-          if(n.userData.turnTimer<=0){
-            n.userData.turnTimer=0.6+Math.random()*2.5;
-            n.userData.dir.set(Math.random()*2-1,0,Math.random()*2-1).normalize();
+          if(n.userData.panicReturn){
+            const dx = n.userData.seatX - n.position.x;
+            const dz = n.userData.seatZ - n.position.z;
+            const dist = Math.hypot(dx, dz);
+            if(dist < 0.45){
+              n.userData.panicReturn = false;
+              n.userData.seated = true;
+              n.userData.stateTimer = 2.0 + Math.random()*2.0;
+              n.userData.speed = n.userData.baseSpeed;
+            } else {
+              const spd = n.userData.baseSpeed * 1.5;
+              n.userData.speed = spd;
+              n.position.x += (dx/dist) * spd * dt;
+              n.position.z += (dz/dist) * spd * dt;
+              n.rotation.y = Math.atan2(dx, dz);
+            }
+          } else {
+            n.userData.moveTimer -= dt;
+            n.userData.turnTimer -= dt;
+            if(n.userData.turnTimer<=0){
+              n.userData.turnTimer=0.6+Math.random()*2.5;
+              n.userData.dir.set(Math.random()*2-1,0,Math.random()*2-1).normalize();
+            }
+            n.position.addScaledVector(n.userData.dir,n.userData.speed*dt);
+            avoidWallsOrTurn(n);
+            n.rotation.y=Math.atan2(n.userData.dir.x,n.userData.dir.z);
+
+            if(n.userData.moveTimer <= 0){
+              n.userData.seated = true;
+              n.userData.stateTimer = 2.0 + Math.random()*2.0;
+            }
           }
-          n.position.addScaledVector(n.userData.dir,n.userData.speed*dt);
-          avoidWallsOrTurn(n);
-          n.rotation.y=Math.atan2(n.userData.dir.x,n.userData.dir.z);
+
           n.userData.eyeL.position.x += (-0.11 - n.userData.eyeL.position.x) * 0.2;
           n.userData.eyeR.position.x += (0.11 - n.userData.eyeR.position.x) * 0.2;
           n.userData.gait += dt*10;
           n.userData.lLeg.rotation.x = Math.sin(n.userData.gait)*0.85;
           n.userData.rLeg.rotation.x = -Math.sin(n.userData.gait)*0.85;
-
-          if(n.userData.moveTimer <= 0){
-            n.userData.seated = true;
-            n.userData.stateTimer = 2.0 + Math.random()*2.0;
-          }
         }
       }
 
