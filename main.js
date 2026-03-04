@@ -8,6 +8,10 @@ import { createProjectileMesh } from './projectiles.js';
     const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
     const roomId = new URLSearchParams(location.search).get('room') || 'office-1';
     const nick = resolveNickname();
+    const savedTeam = (localStorage.getItem('officecraft_team') || '').toLowerCase();
+    const teamInput = (prompt('팀 선택: blue / red', savedTeam || 'blue') || 'blue').trim().toLowerCase();
+    const team = teamInput.startsWith('r') ? 'red' : 'blue';
+    localStorage.setItem('officecraft_team', team);
 
     const localWeapon = await resolveWeaponSelection();
     const localWeaponRange = +(localWeapon.len * 5).toFixed(1);
@@ -239,9 +243,13 @@ import { createProjectileMesh } from './projectiles.js';
 
     const scoreEl = document.getElementById('score');
     const aliveEl = document.getElementById('alive');
+    const teamEl = document.getElementById('teamName');
+    const hpEl = document.getElementById('hpVal');
     document.getElementById('weaponName').textContent = localWeapon.name;
     document.getElementById('weaponRange').textContent = `${localWeaponRange}m`;
     document.getElementById('roomId').textContent = roomId;
+    teamEl.textContent = team === 'blue' ? '블루팀' : '레드팀';
+    let playerHp = 100;
     let score = 0;
     const scores = new Map();
     scores.set(nick, 0);
@@ -317,6 +325,7 @@ import { createProjectileMesh } from './projectiles.js';
     const netEl = document.getElementById('netState');
     const hostId = `officecraft-${roomId}`;
     const remotes = new Map();
+    const hiredNpcs = [];
     const conns = [];
     let peer=null, isHost=false;
     const chatLog = document.getElementById('chatLog');
@@ -384,7 +393,7 @@ import { createProjectileMesh } from './projectiles.js';
       const wep = new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,remoteWeapon.len,8), new THREE.MeshStandardMaterial({color:remoteWeapon.color}));
       wep.position.set(0.45,1.1,0.08);
       wep.rotation.z = -0.9;
-      g.add(body, head, lLeg, rLeg, wep); g.userData.name = name; g.userData.lLeg = lLeg; g.userData.rLeg = rLeg; g.userData.moveSpeed = 0; g.userData.gait = Math.random()*Math.PI*2;
+      g.add(body, head, lLeg, rLeg, wep); g.userData.name = name; g.userData.team = 'unknown'; g.userData.lLeg = lLeg; g.userData.rLeg = rLeg; g.userData.moveSpeed = 0; g.userData.gait = Math.random()*Math.PI*2;
       const tag = makeNameTag(name);
       g.add(tag);
       g.userData.tag = tag;
@@ -417,10 +426,11 @@ import { createProjectileMesh } from './projectiles.js';
           const prevX = m.position.x, prevZ = m.position.z;
           m.position.set(msg.s.x, msg.s.y-1.6, msg.s.z);
           m.rotation.y = msg.s.yaw;
+          m.userData.team = msg.team || m.userData.team || 'unknown';
           const d2 = Math.hypot(m.position.x-prevX, m.position.z-prevZ);
           m.userData.moveSpeed = d2;
           if(typeof msg.score === 'number'){ scores.set(actorNick, msg.score); renderLeaderboard(); }
-          if(isHost) sendAll({type:'state', from: actorId, nick: actorNick, s: msg.s, score: msg.score}, conn);
+          if(isHost) sendAll({type:'state', from: actorId, nick: actorNick, s: msg.s, score: msg.score, team: msg.team, hp: msg.hp}, conn);
         }
         if(msg?.type==='hitNpc'){
           const killed = applyNpcHit(msg.id, msg.by, msg.damage||1, msg.fxMult||1);
@@ -431,6 +441,13 @@ import { createProjectileMesh } from './projectiles.js';
           const p = new THREE.Vector3(msg.p?.x||0, msg.p?.y||0, msg.p?.z||0);
           const d = new THREE.Vector3(msg.d?.x||0, msg.d?.y||0, msg.d?.z||-1).normalize();
           spawnProjectile(p, d, msg.weapon || 'slingshot', !!msg.ult, true);
+          if(isHost) sendAll(msg, conn);
+        }
+        if(msg?.type==='playerHit'){
+          if(msg.targetNick === nick){
+            playerHp = Math.max(0, playerHp - (msg.damage || 10));
+            hpEl.textContent = playerHp;
+          }
           if(isHost) sendAll(msg, conn);
         }
         if(msg?.type==='chat'){ logChat(`${msg.nick}: ${msg.text}`); if(isHost) sendAll(msg, conn); }
@@ -483,11 +500,27 @@ import { createProjectileMesh } from './projectiles.js';
       if(e.code==='ShiftLeft')move.run=d;
       if(e.code==='Space'&&d)move.jump=true;
       if(e.code==='KeyQ'&&d) consumeUltimate();
+      if(e.code==='KeyE'&&d) hireNpcGuard();
     };
     addEventListener('keydown',e=>onKey(true,e));
     addEventListener('keyup',e=>onKey(false,e));
 
     function clampPlayer(p){ p.x=Math.max(-38,Math.min(38,p.x)); p.z=Math.max(-38,Math.min(38,p.z)); }
+    function hireNpcGuard(){
+      if(score < 300) return;
+      awardScore(nick, -300);
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color: team==='blue'?0x2563eb:0xdc2626}));
+      body.position.y = 0.8;
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xf0c7a4}));
+      head.position.y = 1.55;
+      g.add(body, head);
+      g.position.copy(player.position);
+      g.position.y = 0;
+      g.userData = {team, lastAtk:0};
+      scene.add(g);
+      hiredNpcs.push(g);
+    }
     function supportHeightAt(x, z, currentY){
       let h = 1.6; // floor eye height
       const allSurfaces = [...deskSurfaces, ...towerSurfaces];
@@ -659,6 +692,27 @@ import { createProjectileMesh } from './projectiles.js';
         }
       }
 
+      // hired NPC guards attack enemy team players
+      for(const h of hiredNpcs){
+        let target = null;
+        let best = 9999;
+        for(const m of remotes.values()){
+          if(!m.userData || m.userData.team===team || m.userData.team==='unknown') continue;
+          const d = h.position.distanceTo(m.position);
+          if(d < best){ best = d; target = m; }
+        }
+        if(!target) continue;
+        const dir = target.position.clone().sub(h.position);
+        const dist = dir.length();
+        if(dist > 0.01){ dir.normalize(); h.position.addScaledVector(dir, Math.min(3*dt, dist)); h.rotation.y = Math.atan2(dir.x, dir.z); }
+        h.userData.lastAtk += dt;
+        if(dist < 2.1 && h.userData.lastAtk > 1.0){
+          h.userData.lastAtk = 0;
+          const enemyNick = target.userData?.name;
+          if(enemyNick) sendAll({type:'playerHit', targetNick: enemyNick, damage: 10, by: nick});
+        }
+      }
+
       for(const m of remotes.values()){
         const sp = m.userData.moveSpeed || 0;
         m.userData.gait = (m.userData.gait || 0) + Math.min(0.25, sp*35);
@@ -714,7 +768,7 @@ import { createProjectileMesh } from './projectiles.js';
       }
 
       netTick += dt;
-      if(netTick>0.06){ netTick=0; sendAll({type:'state', s:{x:player.position.x,y:player.position.y,z:player.position.z,yaw}, nick, score}); }
+      if(netTick>0.06){ netTick=0; sendAll({type:'state', s:{x:player.position.x,y:player.position.y,z:player.position.z,yaw}, nick, score, team, hp: playerHp}); }
 
       renderer.render(scene,camera);
     }
