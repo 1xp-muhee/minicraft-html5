@@ -64,6 +64,7 @@ import { createProjectileMesh } from './projectiles.js';
 
     const deskSeats = [];
     const deskSurfaces = [];
+    const towerSurfaces = [];
     function desk(x,z){
       const top = new THREE.Mesh(new THREE.BoxGeometry(3,0.25,2), new THREE.MeshStandardMaterial({color:0x8d6e63}));
       top.position.set(x,1.2,z); top.castShadow=true; top.receiveShadow=true; scene.add(top);
@@ -91,6 +92,26 @@ import { createProjectileMesh } from './projectiles.js';
       deskSeats.push({x, z: z+0.9});
     }
     for(let gx=-24; gx<=24; gx+=8) for(let gz=-24; gz<=24; gz+=8) if(Math.random()>0.18) desk(gx,gz);
+
+    // Central watch tower
+    const towerBase = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.2, 6.0, 10), new THREE.MeshStandardMaterial({color:0x7d8792}));
+    towerBase.position.set(0, 3.0, 0); towerBase.castShadow = true; towerBase.receiveShadow = true; scene.add(towerBase);
+    const towerTop = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.2, 0.6, 12), new THREE.MeshStandardMaterial({color:0xa9b4bf}));
+    towerTop.position.set(0, 6.15, 0); towerTop.castShadow = true; towerTop.receiveShadow = true; scene.add(towerTop);
+    towerSurfaces.push({ minX:-4.1, maxX:4.1, minZ:-4.1, maxZ:4.1, topY:6.45 });
+
+    // Stairs to climb tower
+    const stairMat = new THREE.MeshStandardMaterial({color:0x8f99a4});
+    for(let i=0;i<12;i++){
+      const y = 0.2 + i*0.45;
+      const x = -5.2 + i*0.85;
+      const z = 3.6;
+      const step = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.4, 2.2), stairMat);
+      step.position.set(x, y, z);
+      step.castShadow = true; step.receiveShadow = true;
+      scene.add(step);
+      towerSurfaces.push({ minX:x-0.39, maxX:x+0.39, minZ:z-1.1, maxZ:z+1.1, topY:y+0.2 });
+    }
 
     // 4-side doors
     function door(x,y,z,w,h,d){
@@ -469,11 +490,12 @@ import { createProjectileMesh } from './projectiles.js';
     function clampPlayer(p){ p.x=Math.max(-38,Math.min(38,p.x)); p.z=Math.max(-38,Math.min(38,p.z)); }
     function supportHeightAt(x, z, currentY){
       let h = 1.6; // floor eye height
-      for(const s of deskSurfaces){
+      const allSurfaces = [...deskSurfaces, ...towerSurfaces];
+      for(const s of allSurfaces){
         if(x>=s.minX && x<=s.maxX && z>=s.minZ && z<=s.maxZ){
-          const deskEyeY = s.topY + 1.6;
-          // only snap when near/above desk to avoid pulling from below
-          if(currentY >= deskEyeY - 0.45) h = Math.max(h, deskEyeY);
+          const eyeY = s.topY + 1.6;
+          // only snap when near/above platform to avoid pulling from below
+          if(currentY >= eyeY - 0.5) h = Math.max(h, eyeY);
         }
       }
       return h;
