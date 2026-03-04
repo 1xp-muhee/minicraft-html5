@@ -213,7 +213,7 @@ import { createProjectileMesh } from './projectiles.js';
 
     function makeNPC(x,z,id,opts={}){
       const g = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color:0x4f79d8})); body.position.y = 0.8;
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color:0xfacc15})); body.position.y = 0.8;
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xf0c7a4})); head.position.y = 1.55;
 
       // random hair
