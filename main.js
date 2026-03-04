@@ -403,6 +403,11 @@ import { createProjectileMesh } from './projectiles.js';
       if(playerName === nick){ score = next; scoreEl.textContent = score; }
       renderLeaderboard();
     }
+    function myRankTitle(){
+      const rows = [...scores.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
+      const idx = rows.findIndex(([name])=>name===nick);
+      return rankTitle(idx>=0?idx:9);
+    }
     let chiHits = 0;
     let ultimateReady = false;
     let ultimateArmed = false;
@@ -552,6 +557,14 @@ import { createProjectileMesh } from './projectiles.js';
         npc.userData.eyeL.material.color.setHex(0xff2d2d);
         npc.userData.eyeR.material.color.setHex(0xff2d2d);
         npc.children.forEach(ch=>{ if(ch.geometry?.type==='BoxGeometry' && ch.position.y>1.3) ch.material?.color?.setHex?.(0xf2b2a0); });
+        const angry = [
+          `${myRankTitle()}님! 왜 때립니까?!`,
+          `${myRankTitle()}님, 지금 화납니다!`,
+          `${myRankTitle()}님, 선 넘으셨어요!`,
+          `${myRankTitle()}님, 바로 항의합니다!`
+        ];
+        setAlertText(npc.userData.alertTag, angry[Math.floor(Math.random()*angry.length)]);
+        npc.userData.alertTag.visible = true;
       }
 
       if(npc.userData.hp <= 0){
@@ -802,21 +815,26 @@ import { createProjectileMesh } from './projectiles.js';
         if(n.userData.dead) continue;
 
         if(n.userData.enraged){
-          // berserk worker: chase and keyboard attack players
-          let targetPos = player.position;
+          // berserk worker: chase and keyboard attack players (walk only, no flying)
+          let targetPos = player.position.clone();
+          targetPos.y = 0;
           let targetNick = nick;
-          let best = n.position.distanceTo(player.position);
+          let best = n.position.clone().setY(0).distanceTo(targetPos);
           for(const m of remotes.values()){
             if(!m?.userData?.name) continue;
-            const d = n.position.distanceTo(m.position);
-            if(d < best){ best = d; targetPos = m.position; targetNick = m.userData.name; }
+            const rp = m.position.clone(); rp.y = 0;
+            const d = n.position.clone().setY(0).distanceTo(rp);
+            if(d < best){ best = d; targetPos = rp; targetNick = m.userData.name; }
           }
 
-          const dir = targetPos.clone().sub(n.position);
+          n.position.y = 0;
+          const dir = targetPos.clone().sub(n.position.clone().setY(0));
+          dir.y = 0;
           const dist = dir.length();
           if(dist > 0.01){
             dir.normalize();
-            n.position.addScaledVector(dir, Math.min((n.userData.baseSpeed*1.15)*dt, dist));
+            n.position.addScaledVector(dir, Math.min((n.userData.baseSpeed*1.5)*dt, dist));
+            n.position.y = 0;
             n.rotation.y = Math.atan2(dir.x, dir.z);
           }
           n.userData.gait += dt*11;
