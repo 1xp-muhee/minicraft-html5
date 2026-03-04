@@ -447,6 +447,22 @@ import { createProjectileMesh } from './projectiles.js';
           if(msg.targetNick === nick){
             playerHp = Math.max(0, playerHp - (msg.damage || 10));
             hpEl.textContent = playerHp;
+
+            // knockback
+            let kx = 0, kz = 0;
+            if(typeof msg.fromX === 'number' && typeof msg.fromZ === 'number'){
+              const dx = player.position.x - msg.fromX;
+              const dz = player.position.z - msg.fromZ;
+              const len = Math.hypot(dx, dz) || 1;
+              kx = dx / len;
+              kz = dz / len;
+            } else {
+              kx = Math.sin(yaw);
+              kz = Math.cos(yaw);
+            }
+            player.position.x += kx * 0.85;
+            player.position.z += kz * 0.85;
+            clampPlayer(player.position);
           }
           if(isHost) sendAll(msg, conn);
         }
@@ -709,7 +725,7 @@ import { createProjectileMesh } from './projectiles.js';
         if(dist < 2.1 && h.userData.lastAtk > 1.0){
           h.userData.lastAtk = 0;
           const enemyNick = target.userData?.name;
-          if(enemyNick) sendAll({type:'playerHit', targetNick: enemyNick, damage: 10, by: nick});
+          if(enemyNick) sendAll({type:'playerHit', targetNick: enemyNick, damage: 10, by: nick, fromX: h.position.x, fromZ: h.position.z});
         }
       }
 
