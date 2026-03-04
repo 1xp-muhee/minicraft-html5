@@ -31,6 +31,7 @@
     <div id="lookText">마우스 시점 / 좌클릭 <span class="danger">직원 때리기</span></div>
     <div>점수: <span id="score">0</span> | 직원 수: <span id="alive">0</span></div>
     <div>무기: <span id="weaponName">-</span> | 사거리: <span id="weaponRange">-</span></div>
+    <div>기력: <span id="chiState">0/10</span> <span id="ultReady" style="display:none;color:#ffe08a;font-weight:700">⚡ 필살기 준비!</span></div>
     <div>멀티룸: <span id="roomId"></span> (<span id="netState">오프라인</span>)</div>
   </div>
   <div id="cross">+</div>
@@ -40,6 +41,7 @@
     <div id="stickBase"><div id="stickKnob"></div></div>
     <button class="mbtn" id="jumpBtn">점프</button>
     <button class="mbtn" id="hitBtn">공격</button>
+    <button class="mbtn" id="ultBtn" style="bottom:194px">필살기</button>
   </div>
 
   <div id="chatWrap">
@@ -151,9 +153,9 @@
 
     // hit effect
     const hitFx = [];
-    function spawnHitFx(pos){
+    function spawnHitFx(pos, mult=1){
       const geo = new THREE.CylinderGeometry(0.05, 0.05, 0.02, 10);
-      for(let i=0;i<12;i++){
+      for(let i=0;i<Math.round(12*mult);i++){
         const p = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({color: (i%2===0 ? 0xf6c64b : 0xffe08a)}));
         p.rotation.x = Math.PI/2;
         p.rotation.z = Math.random()*Math.PI;
@@ -184,10 +186,33 @@
     document.getElementById('weaponRange').textContent = `${localWeaponRange}m`;
     document.getElementById('roomId').textContent = roomId;
     let score = 0;
+    let chiHits = 0;
+    let ultimateReady = false;
+    let ultimateArmed = false;
+    const chiStateEl = document.getElementById('chiState');
+    const ultReadyEl = document.getElementById('ultReady');
     const npcById = new Map();
     function updateAlive(){ aliveEl.textContent = npcs.filter(n=>!n.userData.dead).length; }
+    function updateChiUI(){
+      chiStateEl.textContent = `${Math.min(chiHits,10)}/10`;
+      ultReadyEl.style.display = ultimateReady ? 'inline' : 'none';
+      ultReadyEl.textContent = ultimateArmed ? '⚡ 필살기 발동!' : '⚡ 필살기 준비!';
+    }
+    function addChi(n=1){
+      if(ultimateReady) return;
+      chiHits += n;
+      if(chiHits >= 10){ chiHits = 10; ultimateReady = true; }
+      updateChiUI();
+    }
+    function consumeUltimate(){
+      if(!ultimateReady) return false;
+      ultimateArmed = true;
+      updateChiUI();
+      return true;
+    }
     for(let i=0;i<18;i++){ const id=`n${i}`; makeNPC((Math.random()*60)-30,(Math.random()*60)-30,id); npcById.set(id,npcs[npcs.length-1]); }
     updateAlive();
+    updateChiUI();
 
     // net
     const netEl = document.getElementById('netState');
@@ -264,10 +289,10 @@
       scene.add(g); remotes.set(id,g); return g;
     }
 
-    function applyNpcHit(id, killer=''){
+    function applyNpcHit(id, killer='', damage=1, fxMult=1){
       const npc = npcById.get(id); if(!npc || npc.userData.dead) return;
-      npc.userData.hp -= 1; npc.position.y = 0.12; setTimeout(()=>{ if(!npc.userData.dead) npc.position.y=0; }, 80);
-      spawnHitFx(npc.position.clone().add(new THREE.Vector3(0,1.3,0)));
+      npc.userData.hp -= damage; npc.position.y = 0.12; setTimeout(()=>{ if(!npc.userData.dead) npc.position.y=0; }, 80);
+      spawnHitFx(npc.position.clone().add(new THREE.Vector3(0,1.3,0)), fxMult);
       if(npc.userData.hp <= 0){
         npc.userData.dead = true; npc.visible = false; updateAlive();
         if(killer===nick){ score += 100; scoreEl.textContent = score; }
@@ -288,7 +313,7 @@
           m.rotation.y = msg.s.yaw;
           if(isHost) sendAll({type:'state', from: actorId, nick: msg.nick || 'guest', s: msg.s}, conn);
         }
-        if(msg?.type==='hitNpc'){ applyNpcHit(msg.id, msg.by); if(isHost) sendAll(msg, conn); }
+        if(msg?.type==='hitNpc'){ applyNpcHit(msg.id, msg.by, msg.damage||1, msg.fxMult||1); if(isHost) sendAll(msg, conn); }
         if(msg?.type==='chat'){ logChat(`${msg.nick}: ${msg.text}`); if(isHost) sendAll(msg, conn); }
       });
       conn.on('close', ()=>{ const m=remotes.get(conn.peer); if(m){scene.remove(m); remotes.delete(conn.peer);} });
@@ -338,6 +363,7 @@
       if(e.code==='KeyD')move.r=d;
       if(e.code==='ShiftLeft')move.run=d;
       if(e.code==='Space'&&d)move.jump=true;
+      if(e.code==='KeyQ'&&d) consumeUltimate();
     };
     addEventListener('keydown',e=>onKey(true,e));
     addEventListener('keyup',e=>onKey(false,e));
@@ -346,18 +372,25 @@
 
     function hitNPC(){
       punchT = 0.16;
+      const ult = ultimateArmed;
       raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
       const alive = npcs.filter(n=>!n.userData.dead);
       const hits = raycaster.intersectObjects(alive, true);
-      if(!hits.length || hits[0].distance>localWeaponRange) return;
+      const range = ult ? 9999 : localWeaponRange;
+      if(!hits.length || hits[0].distance>range) return;
       const target = hits[0].object.parent;
-      applyNpcHit(target.userData.id, nick);
-      sendAll({type:'hitNpc', id:target.userData.id, by:nick});
+      const damage = ult ? 999 : 1;
+      const fxMult = ult ? 10 : 1;
+      applyNpcHit(target.userData.id, nick, damage, fxMult);
+      if(ult){ ultimateArmed = false; ultimateReady = false; chiHits = 0; updateChiUI(); }
+      else addChi(1);
+      sendAll({type:'hitNpc', id:target.userData.id, by:nick, damage, fxMult});
     }
 
     addEventListener('mousedown', (e)=>{ if(!controlEnabled || document.pointerLockElement!==document.body) return; if(e.button===0) hitNPC(); });
     document.getElementById('hitBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); if(controlEnabled) hitNPC(); }, {passive:false});
     document.getElementById('jumpBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); if(controlEnabled) move.jump=true; }, {passive:false});
+    document.getElementById('ultBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); if(controlEnabled) consumeUltimate(); }, {passive:false});
 
     // mobile touch
     const stickBase = document.getElementById('stickBase'); const stickKnob = document.getElementById('stickKnob');
