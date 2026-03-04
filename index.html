@@ -122,12 +122,15 @@
     // hit effect
     const hitFx = [];
     function spawnHitFx(pos){
-      const geo = new THREE.SphereGeometry(0.05, 8, 8);
+      const geo = new THREE.CylinderGeometry(0.05, 0.05, 0.02, 10);
       for(let i=0;i<12;i++){
-        const p = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({color: (i%3===0 ? 0x6b0f16 : 0xc71f2d)}));
+        const p = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({color: (i%2===0 ? 0xf6c64b : 0xffe08a)}));
+        p.rotation.x = Math.PI/2;
+        p.rotation.z = Math.random()*Math.PI;
         p.position.copy(pos);
-        p.userData.v = new THREE.Vector3((Math.random()-0.5)*3.4, Math.random()*2.8, (Math.random()-0.5)*3.4);
-        p.userData.life = 0.42;
+        p.userData.v = new THREE.Vector3((Math.random()-0.5)*3.4, Math.random()*3.0, (Math.random()-0.5)*3.4);
+        p.userData.spin = (Math.random()-0.5)*16;
+        p.userData.life = 0.45;
         scene.add(p); hitFx.push(p);
       }
     }
@@ -292,6 +295,7 @@
         const p=hitFx[i];
         p.userData.life -= dt;
         p.position.addScaledVector(p.userData.v, dt);
+        p.rotation.y += (p.userData.spin || 0) * dt;
         p.userData.v.y -= 7.5*dt;
         p.userData.v.multiplyScalar(0.985);
         p.scale.setScalar(Math.max(0.01,p.userData.life*2.2));
