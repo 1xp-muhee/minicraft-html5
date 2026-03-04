@@ -1038,8 +1038,12 @@ import { createProjectileMesh } from './projectiles.js';
             if(n.userData.dead) continue;
             const hitPos = n.position.clone().add(new THREE.Vector3(0,1.1,0));
             if(b.position.distanceTo(hitPos) < 0.65){
-              if(n.userData.seated && !b.userData.ult){ awardScore(nick, -80); }
-              else {
+              if(n.userData.seated && !b.userData.ult){
+                awardScore(nick, -80);
+                setAlertText(n.userData.alertTag, '일하는중입니다');
+                n.userData.alertTag.visible = true;
+                n.userData.stunned = Math.max(n.userData.stunned || 0, 0.45);
+              } else {
                 const killed = applyNpcHit(n.userData.id, nick, b.userData.damage||1, b.userData.fxMult||1);
                 if(killed) awardScore(nick, 100);
                 if(!b.userData.ult) addChi(1);
