@@ -841,6 +841,7 @@ import { createProjectileMesh } from './projectiles.js';
 
         let hit = false;
         if(!b.userData.noHit){
+          // NPC hit
           for(const n of npcs){
             if(n.userData.dead) continue;
             const hitPos = n.position.clone().add(new THREE.Vector3(0,1.1,0));
@@ -854,6 +855,20 @@ import { createProjectileMesh } from './projectiles.js';
               }
               hit = true;
               break;
+            }
+          }
+
+          // Player hit (remote users)
+          if(!hit){
+            for(const m of remotes.values()){
+              if(!m?.userData?.name) continue;
+              if(m.userData.team === team || m.userData.team === 'unknown') continue;
+              const hitPos = m.position.clone().add(new THREE.Vector3(0,1.0,0));
+              if(b.position.distanceTo(hitPos) < 0.75){
+                sendAll({type:'playerHit', targetNick: m.userData.name, damage: (b.userData.ult ? 18 : 10), by: nick, fromX: b.position.x, fromZ: b.position.z});
+                hit = true;
+                break;
+              }
             }
           }
         }
