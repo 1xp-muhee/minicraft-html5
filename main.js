@@ -495,6 +495,7 @@ import { createProjectileMesh } from './projectiles.js';
     function sendAll(msg, except=null){ for(const c of conns){ if(c.open && c!==except) c.send(msg); } }
     function upsertRemoteGuard(msg){
       const g = ensureRemoteGuard(msg.guardId, msg.team || 'blue');
+      g.userData.team = msg.team || g.userData.team;
       g.position.set(msg.x||0, 0, msg.z||0);
       g.rotation.y = msg.ry || 0;
       return g;
@@ -543,9 +544,17 @@ import { createProjectileMesh } from './projectiles.js';
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xf0c7a4}));
       head.position.y = 1.55;
       g.add(body, head);
+      g.userData.team = teamKey;
       scene.add(g);
       remoteGuards.set(guardId, g);
       return g;
+    }
+
+    function removeRemoteGuard(guardId){
+      const g = remoteGuards.get(guardId);
+      if(!g) return;
+      scene.remove(g);
+      remoteGuards.delete(guardId);
     }
 
     function ensureRemote(id,name='guest'){
@@ -680,6 +689,23 @@ import { createProjectileMesh } from './projectiles.js';
           upsertRemoteGuard(msg);
           if(isHost) sendAll(msg, conn);
         }
+        if(msg?.type==='guardHit'){
+          const guard = hiredNpcs.find(h=>h.userData?.guardId===msg.guardId);
+          if(guard){
+            guard.userData.guardHp = (guard.userData.guardHp || 10) - (msg.damage || 1);
+            if(guard.userData.guardHp <= 0){
+              guard.userData.dead = true;
+              guard.visible = false;
+              const idx = hiredNpcs.indexOf(guard); if(idx>=0) hiredNpcs.splice(idx,1);
+              sendAll({type:'guardDead', guardId: msg.guardId});
+            }
+          }
+          if(isHost) sendAll(msg, conn);
+        }
+        if(msg?.type==='guardDead'){
+          removeRemoteGuard(msg.guardId);
+          if(isHost) sendAll(msg, conn);
+        }
         if(msg?.type==='guardsSnapshot'){
           const list = Array.isArray(msg.guards) ? msg.guards : [];
           for(const g of list){ upsertRemoteGuard(g); }
@@ -760,6 +786,7 @@ import { createProjectileMesh } from './projectiles.js';
       best.userData.dead = true; // exclude from worker loops/collisions
       best.userData.recruited = true;
       best.userData.guardId = `${peer?.id || nick}-g-${Date.now()}-${Math.floor(Math.random()*9999)}`;
+      best.userData.guardHp = Math.round((best.userData.hp || 3) * 1.4);
       best.userData.lastAtk = 0;
       best.userData.carrying = null;
       best.userData.guardDamage = best.userData.isBerserk ? 14 : 10;
@@ -1168,6 +1195,20 @@ import { createProjectileMesh } from './projectiles.js';
               const hitPos = m.position.clone().add(new THREE.Vector3(0,1.0,0));
               if(b.position.distanceTo(hitPos) < 0.75){
                 sendAll({type:'playerHit', targetNick: m.userData.name, damage: (b.userData.ult ? 18 : 10), by: nick, fromX: b.position.x, fromZ: b.position.z});
+                hit = true;
+                break;
+              }
+            }
+          }
+
+          // Enemy hired guard hit
+          if(!hit){
+            for(const [gid, g] of remoteGuards.entries()){
+              if(!g?.visible) continue;
+              if(g.userData?.team === team) continue;
+              const hitPos = g.position.clone().add(new THREE.Vector3(0,0.9,0));
+              if(b.position.distanceTo(hitPos) < 0.78){
+                sendAll({type:'guardHit', guardId: gid, damage: b.userData.ult ? 6 : 3, by:nick});
                 hit = true;
                 break;
               }
