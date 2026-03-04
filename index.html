@@ -173,10 +173,20 @@
 
     function makeNPC(x,z,id){
       const g = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color:0x4f79d8})); body.position.y = 0.95;
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xf0c7a4})); head.position.y = 1.8;
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color:0x4f79d8})); body.position.y = 0.8;
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xf0c7a4})); head.position.y = 1.55;
       g.add(body, head); g.position.set(x,0,z);
-      g.userData = { id, hp:3, speed:0.9+Math.random()*0.8, dir:new THREE.Vector3(Math.random()*2-1,0,Math.random()*2-1).normalize(), turnTimer:0.8+Math.random()*2.2, dead:false };
+      g.userData = {
+        id, hp:3,
+        speed:0.9+Math.random()*0.8,
+        dir:new THREE.Vector3(Math.random()*2-1,0,Math.random()*2-1).normalize(),
+        turnTimer:0.8+Math.random()*2.2,
+        dead:false,
+        seatX:x, seatZ:z,
+        seated:true,
+        stateTimer: 2.0 + Math.random()*2.0,
+        moveTimer: 0
+      };
       npcGroup.add(g); npcs.push(g);
     }
 
@@ -379,6 +389,13 @@
       const range = ult ? 9999 : localWeaponRange;
       if(!hits.length || hits[0].distance>range) return;
       const target = hits[0].object.parent;
+
+      if(target.userData.seated && !ult){
+        score -= 80;
+        scoreEl.textContent = score;
+        return;
+      }
+
       const damage = ult ? 999 : 1;
       const fxMult = ult ? 10 : 1;
       applyNpcHit(target.userData.id, nick, damage, fxMult);
@@ -451,7 +468,41 @@
         for(const seg of whipSegments){ seg.rotation.x *= 0.82; seg.rotation.y *= 0.82; }
       }
 
-      for(const n of npcs){ if(n.userData.dead) continue; n.userData.turnTimer-=dt; if(n.userData.turnTimer<=0){ n.userData.turnTimer=0.6+Math.random()*2.5; n.userData.dir.set(Math.random()*2-1,0,Math.random()*2-1).normalize(); } n.position.addScaledVector(n.userData.dir,n.userData.speed*dt); avoidWallsOrTurn(n); n.rotation.y=Math.atan2(n.userData.dir.x,n.userData.dir.z); }
+      for(const n of npcs){
+        if(n.userData.dead) continue;
+
+        n.userData.stateTimer -= dt;
+        if(n.userData.seated){
+          // 기본: 자리에서 근무
+          n.position.x += (n.userData.seatX - n.position.x) * 0.08;
+          n.position.z += (n.userData.seatZ - n.position.z) * 0.08;
+          n.rotation.y += (0 - n.rotation.y) * 0.08;
+          if(n.userData.stateTimer <= 0){
+            n.userData.stateTimer = 2.0 + Math.random()*2.0;
+            if(Math.random() < 0.30){
+              n.userData.seated = false;
+              n.userData.moveTimer = 3.0 + Math.random()*4.0;
+              n.userData.dir.set(Math.random()*2-1,0,Math.random()*2-1).normalize();
+            }
+          }
+        } else {
+          // 자리 이탈 후 이동
+          n.userData.moveTimer -= dt;
+          n.userData.turnTimer -= dt;
+          if(n.userData.turnTimer<=0){
+            n.userData.turnTimer=0.6+Math.random()*2.5;
+            n.userData.dir.set(Math.random()*2-1,0,Math.random()*2-1).normalize();
+          }
+          n.position.addScaledVector(n.userData.dir,n.userData.speed*dt);
+          avoidWallsOrTurn(n);
+          n.rotation.y=Math.atan2(n.userData.dir.x,n.userData.dir.z);
+
+          if(n.userData.moveTimer <= 0){
+            n.userData.seated = true;
+            n.userData.stateTimer = 2.0 + Math.random()*2.0;
+          }
+        }
+      }
 
       for(let i=hitFx.length-1;i>=0;i--){
         const p=hitFx[i];
