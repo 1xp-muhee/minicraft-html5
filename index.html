@@ -26,6 +26,7 @@
     <div id="controlsText">WASD 이동 / Space 점프 / Shift 달리기</div>
     <div id="lookText">마우스 시점 / 좌클릭 <span class="danger">직원 때리기</span></div>
     <div>점수: <span id="score">0</span> | 직원 수: <span id="alive">0</span></div>
+    <div>멀티룸: <span id="roomId"></span> (<span id="netState">오프라인</span>)</div>
   </div>
   <div id="cross">+</div>
   <div id="start"><button id="startBtn">클릭해서 시작</button></div>
@@ -38,6 +39,7 @@
 
   <script type="module">
     import * as THREE from 'https://esm.sh/three@0.160.0';
+    import Peer from 'https://esm.sh/peerjs@1.5.4';
 
     const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
@@ -133,6 +135,89 @@
     function updateAlive(){ aliveEl.textContent = npcs.filter(n=>!n.userData.dead).length; }
     for(let i=0;i<18;i++) makeNPC((Math.random()*60)-30,(Math.random()*60)-30);
     updateAlive();
+
+    // Multiplayer (PeerJS Cloud)
+    const roomEl = document.getElementById('roomId');
+    const netEl = document.getElementById('netState');
+    const roomId = new URLSearchParams(location.search).get('room') || 'office-1';
+    roomEl.textContent = roomId;
+    const hostId = `officecraft-${roomId}`;
+    const remotePlayers = new Map();
+    const allConns = [];
+    let peer = null;
+    let isHost = false;
+
+    function setNetState(t){ netEl.textContent = t; }
+
+    function ensureRemote(id){
+      if(remotePlayers.has(id)) return remotePlayers.get(id);
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color:0x15b097}));
+      body.position.y = 0.95;
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xe7c29f}));
+      head.position.y = 1.8;
+      g.add(body, head);
+      scene.add(g);
+      remotePlayers.set(id, g);
+      return g;
+    }
+    function removeRemote(id){
+      const m = remotePlayers.get(id);
+      if(!m) return;
+      scene.remove(m);
+      remotePlayers.delete(id);
+    }
+
+    function applyRemoteState(fromId, state){
+      if(!state) return;
+      const m = ensureRemote(fromId);
+      if(typeof state.x==='number') m.position.x = state.x;
+      if(typeof state.y==='number') m.position.y = state.y - 1.6;
+      if(typeof state.z==='number') m.position.z = state.z;
+      if(typeof state.yaw==='number') m.rotation.y = state.yaw;
+    }
+
+    function wireConn(conn){
+      allConns.push(conn);
+      conn.on('data', (msg)=>{
+        if(msg?.type==='state'){
+          applyRemoteState(conn.peer, msg.state);
+          if(isHost){
+            for(const c of allConns){ if(c!==conn && c.open) c.send({type:'state', from: conn.peer, state: msg.state}); }
+          }
+        }
+      });
+      conn.on('close', ()=> removeRemote(conn.peer));
+      conn.on('error', ()=> removeRemote(conn.peer));
+    }
+
+    function startClient(){
+      isHost = false;
+      peer = new Peer();
+      peer.on('open', ()=>{
+        const conn = peer.connect(hostId, {reliable:false});
+        conn.on('open', ()=>{ setNetState('참가 완료'); wireConn(conn); });
+        conn.on('error', ()=> setNetState('호스트 연결 실패'));
+      });
+      peer.on('error', ()=> setNetState('연결 오류'));
+    }
+
+    function initMultiplayer(){
+      isHost = true;
+      peer = new Peer(hostId);
+      peer.on('open', ()=> setNetState('호스트 온라인'));
+      peer.on('connection', (conn)=> wireConn(conn));
+      peer.on('error', (err)=>{
+        if(String(err?.type||'').includes('unavailable-id')) {
+          setNetState('룸 참가 중...');
+          try { peer.destroy(); } catch {}
+          startClient();
+        } else {
+          setNetState('연결 오류');
+        }
+      });
+    }
+    initMultiplayer();
 
     // Camera look
     let yaw = 0, pitch = 0;
@@ -253,6 +338,7 @@
     }
 
     let prev = performance.now();
+    let netTick = 0;
     function animate(){
       requestAnimationFrame(animate);
       const now = performance.now();
@@ -295,6 +381,13 @@
         n.position.addScaledVector(n.userData.dir, n.userData.speed*dt);
         avoidWallsOrTurn(n);
         n.rotation.y = Math.atan2(n.userData.dir.x, n.userData.dir.z);
+      }
+
+      netTick += dt;
+      if(netTick > 0.06){
+        netTick = 0;
+        const state = { x: player.position.x, y: player.position.y, z: player.position.z, yaw };
+        for(const c of allConns){ if(c.open) c.send({type:'state', state}); }
       }
 
       renderer.render(scene,camera);
