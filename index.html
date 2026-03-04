@@ -114,12 +114,11 @@
       }
       updateAlive();
     }
-    spawnNPCs();
-
     const scoreEl = document.getElementById('score');
     const aliveEl = document.getElementById('alive');
     let score = 0;
     function updateAlive(){ aliveEl.textContent = npcs.filter(n=>!n.userData.dead).length; }
+    spawnNPCs();
 
     // Controls
     const vel = new THREE.Vector3();
