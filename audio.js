@@ -7,8 +7,9 @@ export function createAmbientBgmStarter() {
     if (!AC) return;
 
     const ac = new AC();
+    ac.resume?.();
     const master = ac.createGain();
-    master.gain.value = 0.07;
+    master.gain.value = 0.14;
     master.connect(ac.destination);
 
     const notes = [220.0, 246.94, 261.63, 293.66, 329.63, 293.66, 261.63, 246.94];
@@ -44,6 +45,9 @@ export function createAmbientBgmStarter() {
 
       step++;
     };
+
+    const unlock = () => { ac.resume?.(); window.removeEventListener('pointerdown', unlock); };
+    window.addEventListener('pointerdown', unlock, { once:true });
 
     tick();
     setInterval(tick, 950);
