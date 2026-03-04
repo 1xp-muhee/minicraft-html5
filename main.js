@@ -98,6 +98,7 @@ import { createProjectileMesh } from './projectiles.js';
 
     const deskSeats = [];
     const deskSurfaces = [];
+    const seatOwner = new Map(); // seatIndex -> npcId
     const towerSurfaces = [];
     function desk(x,z){
       const top = new THREE.Mesh(new THREE.BoxGeometry(3,0.25,2), new THREE.MeshStandardMaterial({color:0x8d6e63}));
@@ -342,7 +343,9 @@ import { createProjectileMesh } from './projectiles.js';
       g.add(body, head, hair, eWL, eWR, ePL, ePR, lLeg, rLeg, alertTag);
       if(keyboard) g.add(keyboard);
       g.position.set(x,0,z);
-      const seat = opts.seat || deskSeats[Math.floor(Math.random()*deskSeats.length)] || {x, z};
+      const seatIndex = Number.isInteger(opts.seatIndex) ? opts.seatIndex : -1;
+      const seat = opts.seat || (seatIndex>=0 ? deskSeats[seatIndex] : null) || deskSeats[Math.floor(Math.random()*deskSeats.length)] || {x, z};
+      if(seatIndex >= 0) seatOwner.set(seatIndex, id);
       const baseSpeed = 0.9+Math.random()*0.8;
       g.userData = {
         id, hp:(isBerserk?4.5:3),
@@ -356,7 +359,7 @@ import { createProjectileMesh } from './projectiles.js';
         dir:new THREE.Vector3(Math.random()*2-1,0,Math.random()*2-1).normalize(),
         turnTimer:0.8+Math.random()*2.2,
         dead:false,
-        seatX: seat.x, seatZ: seat.z,
+        seatX: seat.x, seatZ: seat.z, seatIndex,
         seated: opts.seated ?? true,
         entering: opts.entering ?? false,
         willLeave: Math.random() < 0.30,
@@ -434,12 +437,21 @@ import { createProjectileMesh } from './projectiles.js';
       updateChiUI();
       return true;
     }
+    function findFreeSeatIndex(){
+      if(!deskSeats.length) return -1;
+      const free = [];
+      for(let i=0;i<deskSeats.length;i++) if(!seatOwner.has(i)) free.push(i);
+      if(free.length===0) return -1;
+      return free[Math.floor(Math.random()*free.length)];
+    }
+
     let npcSeq = 0;
     const initialCount = 50;
     for(let i=0;i<initialCount;i++){
-      const seat = deskSeats[i % Math.max(1, deskSeats.length)] || {x:(Math.random()*60)-30, z:(Math.random()*60)-30};
+      const si = findFreeSeatIndex();
+      const seat = (si>=0 ? deskSeats[si] : null) || {x:(Math.random()*60)-30, z:(Math.random()*60)-30};
       const id=`n${npcSeq++}`;
-      makeNPC(seat.x + (Math.random()-0.5)*0.4, seat.z + (Math.random()-0.5)*0.4, id, { seat, seated:true, entering:false });
+      makeNPC(seat.x + (Math.random()-0.5)*0.4, seat.z + (Math.random()-0.5)*0.4, id, { seat, seatIndex:si, seated:true, entering:false });
       npcById.set(id,npcs[npcs.length-1]);
     }
     updateAlive();
@@ -449,10 +461,12 @@ import { createProjectileMesh } from './projectiles.js';
 
     function spawnFromRandomDoor(){
       if(!deskSeats.length) return;
+      const si = findFreeSeatIndex();
+      if(si < 0) return; // no empty seat
       const door = doorSpawns[Math.floor(Math.random()*doorSpawns.length)];
-      const seat = deskSeats[Math.floor(Math.random()*deskSeats.length)];
+      const seat = deskSeats[si];
       const id = `n${npcSeq++}`;
-      makeNPC(door.x, door.z, id, { seat, seated:false, entering:true });
+      makeNPC(door.x, door.z, id, { seat, seatIndex:si, seated:false, entering:true });
       npcById.set(id, npcs[npcs.length-1]);
       updateAlive();
     }
@@ -570,7 +584,9 @@ import { createProjectileMesh } from './projectiles.js';
       }
 
       if(npc.userData.hp <= 0){
-        npc.userData.dead = true; npc.visible = false; updateAlive();
+        npc.userData.dead = true; npc.visible = false;
+        if(npc.userData.seatIndex >= 0) seatOwner.delete(npc.userData.seatIndex);
+        updateAlive();
         return true;
       }
       return false;
@@ -712,6 +728,7 @@ import { createProjectileMesh } from './projectiles.js';
 
       best.userData.dead = true;
       best.visible = false;
+      if(best.userData.seatIndex >= 0) seatOwner.delete(best.userData.seatIndex);
       updateAlive();
     }
     function supportHeightAt(x, z, currentY){
