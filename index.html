@@ -6,7 +6,7 @@
   <title>OfficeCraft: Employee Mayhem</title>
   <style>
     html, body { margin:0; width:100%; height:100%; overflow:hidden; background:#cdd7e1; font-family:system-ui,sans-serif; touch-action:none; }
-    #ui{position:fixed;left:10px;top:10px;z-index:10;color:#fff;background:rgba(0,0,0,.45);padding:10px 12px;border-radius:10px;font-size:13px;line-height:1.45;max-width:75vw}
+    #ui{position:fixed;left:10px;top:10px;z-index:10;color:#fff;background:rgba(0,0,0,.45);padding:10px 12px;border-radius:10px;font-size:13px;line-height:1.45;max-width:78vw}
     #cross{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:10;color:#fff;font-size:22px;text-shadow:0 0 6px #000;pointer-events:none}
     #start{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;background:rgba(0,0,0,.55)}
     #start button{font-size:18px;padding:14px 22px;border:none;border-radius:10px;cursor:pointer}
@@ -18,6 +18,10 @@
     .mbtn{position:absolute;right:20px;width:74px;height:74px;border:none;border-radius:999px;color:#fff;font-weight:700;font-size:14px;background:rgba(0,0,0,.45);border:2px solid rgba(255,255,255,.35);pointer-events:auto}
     #hitBtn{bottom:22px}
     #jumpBtn{bottom:108px}
+
+    #chatWrap{position:fixed;right:10px;bottom:10px;z-index:16;width:280px;background:rgba(0,0,0,.42);border-radius:10px;color:#fff;overflow:hidden}
+    #chatLog{height:110px;overflow:auto;padding:8px;font-size:12px}
+    #chatInput{width:100%;box-sizing:border-box;border:none;outline:none;padding:8px;font-size:12px;background:rgba(255,255,255,.92)}
   </style>
 </head>
 <body>
@@ -37,11 +41,18 @@
     <button class="mbtn" id="hitBtn">공격</button>
   </div>
 
+  <div id="chatWrap">
+    <div id="chatLog"></div>
+    <input id="chatInput" placeholder="채팅 입력 후 Enter" />
+  </div>
+
   <script type="module">
     import * as THREE from 'https://esm.sh/three@0.160.0';
     import Peer from 'https://esm.sh/peerjs@1.5.4';
 
     const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    const roomId = new URLSearchParams(location.search).get('room') || 'office-1';
+    const nick = new URLSearchParams(location.search).get('nick') || `user-${Math.floor(Math.random()*999)}`;
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xcdd7e1);
@@ -50,7 +61,6 @@
     const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 250);
     const player = new THREE.Object3D();
     player.position.set(0, 1.6, 8);
-    camera.position.set(0,0,0);
     player.add(camera);
     scene.add(player);
 
@@ -61,27 +71,22 @@
     document.body.appendChild(renderer.domElement);
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0x8ea0b2, 0.75));
-    const d = new THREE.DirectionalLight(0xffffff, 0.9);
-    d.position.set(20,40,10); d.castShadow = true; d.shadow.mapSize.set(2048,2048); scene.add(d);
+    const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+    sun.position.set(20,40,10); sun.castShadow = true; sun.shadow.mapSize.set(2048,2048); scene.add(sun);
 
     const start = document.getElementById('start');
     const mobileHud = document.getElementById('mobileHud');
-
     let controlEnabled = false;
     document.getElementById('startBtn').onclick = async () => {
       controlEnabled = true;
       start.style.display = 'none';
-      if (isTouch) {
-        mobileHud.style.display = 'block';
-      } else {
-        await document.body.requestPointerLock?.();
-      }
+      if (isTouch) mobileHud.style.display = 'block';
+      else await document.body.requestPointerLock?.();
     };
 
     document.addEventListener('pointerlockchange', ()=>{
       if (!isTouch && document.pointerLockElement !== document.body && controlEnabled) {
-        start.style.display = 'flex';
-        controlEnabled = false;
+        start.style.display = 'flex'; controlEnabled = false;
       }
     });
 
@@ -90,315 +95,210 @@
       document.getElementById('lookText').innerHTML = '오른쪽 화면 드래그 시점 / 공격 버튼 <span class="danger">직원 때리기</span>';
     }
 
-    // Office floor & walls
     const floor = new THREE.Mesh(new THREE.BoxGeometry(80,1,80), new THREE.MeshStandardMaterial({color:0xbfc7d1}));
     floor.position.y = -0.5; floor.receiveShadow = true; scene.add(floor);
-    function wall(x,y,z,w,h,dd,col=0xe8edf2){
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,dd), new THREE.MeshStandardMaterial({color:col}));
-      m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true; scene.add(m);
-    }
+    function wall(x,y,z,w,h,d,col=0xe8edf2){ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshStandardMaterial({color:col})); m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true; scene.add(m); }
     wall(0,2,-40,80,5,1); wall(0,2,40,80,5,1); wall(-40,2,0,1,5,80); wall(40,2,0,1,5,80);
 
     function desk(x,z){
       const top = new THREE.Mesh(new THREE.BoxGeometry(3,0.25,2), new THREE.MeshStandardMaterial({color:0x8d6e63}));
       top.position.set(x,1.2,z); top.castShadow=true; top.receiveShadow=true; scene.add(top);
-      const legGeo = new THREE.BoxGeometry(0.2,1.1,0.2);
-      const legMat = new THREE.MeshStandardMaterial({color:0x555});
-      [[1.3,0.6,0.8],[-1.3,0.6,0.8],[1.3,0.6,-0.8],[-1.3,0.6,-0.8]].forEach(([lx,ly,lz])=>{
-        const leg = new THREE.Mesh(legGeo, legMat);
-        leg.position.set(x+lx,ly,z+lz); leg.castShadow=true; leg.receiveShadow=true; scene.add(leg);
-      });
+      const legGeo = new THREE.BoxGeometry(0.2,1.1,0.2), legMat = new THREE.MeshStandardMaterial({color:0x555});
+      [[1.3,0.6,0.8],[-1.3,0.6,0.8],[1.3,0.6,-0.8],[-1.3,0.6,-0.8]].forEach(([lx,ly,lz])=>{ const leg = new THREE.Mesh(legGeo, legMat); leg.position.set(x+lx,ly,z+lz); leg.castShadow=true; leg.receiveShadow=true; scene.add(leg); });
       const pc = new THREE.Mesh(new THREE.BoxGeometry(0.9,0.6,0.08), new THREE.MeshStandardMaterial({color:0x202225}));
       pc.position.set(x,1.65,z-0.45); scene.add(pc);
     }
-    for(let gx=-24; gx<=24; gx+=8){
-      for(let gz=-24; gz<=24; gz+=8){ if(Math.random()>0.18) desk(gx,gz); }
+    for(let gx=-24; gx<=24; gx+=8) for(let gz=-24; gz<=24; gz+=8) if(Math.random()>0.18) desk(gx,gz);
+
+    // first-person hand + swing
+    const handRoot = new THREE.Group();
+    handRoot.position.set(0.46,-0.42,-0.8);
+    camera.add(handRoot);
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.18,0.35,0.18), new THREE.MeshStandardMaterial({color:0xe6b892}));
+    hand.rotation.z = -0.25;
+    handRoot.add(hand);
+    let punchT = 0;
+
+    // hit effect
+    const hitFx = [];
+    function spawnHitFx(pos){
+      const geo = new THREE.SphereGeometry(0.06, 8, 8);
+      const mat = new THREE.MeshBasicMaterial({color:0xffc95a});
+      for(let i=0;i<8;i++){
+        const p = new THREE.Mesh(geo, mat.clone());
+        p.position.copy(pos);
+        p.userData.v = new THREE.Vector3((Math.random()-0.5)*3, Math.random()*2.5, (Math.random()-0.5)*3);
+        p.userData.life = 0.35;
+        scene.add(p); hitFx.push(p);
+      }
     }
 
-    // NPC
     const npcs = [];
     const npcGroup = new THREE.Group(); scene.add(npcGroup);
     const raycaster = new THREE.Raycaster();
 
-    function makeNPC(x,z){
+    function makeNPC(x,z,id){
       const g = new THREE.Group();
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color:0x4f79d8})); body.position.y = 0.95;
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xf0c7a4})); head.position.y = 1.8;
       g.add(body, head); g.position.set(x,0,z);
-      g.userData = { hp:3, speed:0.9+Math.random()*0.8, dir:new THREE.Vector3(Math.random()*2-1,0,Math.random()*2-1).normalize(), turnTimer:0.8+Math.random()*2.2, dead:false };
+      g.userData = { id, hp:3, speed:0.9+Math.random()*0.8, dir:new THREE.Vector3(Math.random()*2-1,0,Math.random()*2-1).normalize(), turnTimer:0.8+Math.random()*2.2, dead:false };
       npcGroup.add(g); npcs.push(g);
     }
 
     const scoreEl = document.getElementById('score');
     const aliveEl = document.getElementById('alive');
+    document.getElementById('roomId').textContent = roomId;
     let score = 0;
+    const npcById = new Map();
     function updateAlive(){ aliveEl.textContent = npcs.filter(n=>!n.userData.dead).length; }
-    for(let i=0;i<18;i++) makeNPC((Math.random()*60)-30,(Math.random()*60)-30);
+    for(let i=0;i<18;i++){ const id=`n${i}`; makeNPC((Math.random()*60)-30,(Math.random()*60)-30,id); npcById.set(id,npcs[npcs.length-1]); }
     updateAlive();
 
-    // Multiplayer (PeerJS Cloud)
-    const roomEl = document.getElementById('roomId');
+    // net
     const netEl = document.getElementById('netState');
-    const roomId = new URLSearchParams(location.search).get('room') || 'office-1';
-    roomEl.textContent = roomId;
     const hostId = `officecraft-${roomId}`;
-    const remotePlayers = new Map();
-    const allConns = [];
-    let peer = null;
-    let isHost = false;
+    const remotes = new Map();
+    const conns = [];
+    let peer=null, isHost=false;
+    const chatLog = document.getElementById('chatLog');
+    const chatInput = document.getElementById('chatInput');
 
-    function setNetState(t){ netEl.textContent = t; }
+    function netState(t){ netEl.textContent = t; }
+    function logChat(t){ const d=document.createElement('div'); d.textContent=t; chatLog.appendChild(d); chatLog.scrollTop = chatLog.scrollHeight; }
+    function sendAll(msg, except=null){ for(const c of conns){ if(c.open && c!==except) c.send(msg); } }
 
-    function ensureRemote(id){
-      if(remotePlayers.has(id)) return remotePlayers.get(id);
+    function ensureRemote(id,name='guest'){
+      if(remotes.has(id)) return remotes.get(id);
       const g = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color:0x15b097}));
-      body.position.y = 0.95;
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xe7c29f}));
-      head.position.y = 1.8;
-      g.add(body, head);
-      scene.add(g);
-      remotePlayers.set(id, g);
-      return g;
-    }
-    function removeRemote(id){
-      const m = remotePlayers.get(id);
-      if(!m) return;
-      scene.remove(m);
-      remotePlayers.delete(id);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.1,0.45), new THREE.MeshStandardMaterial({color:0x15b097})); body.position.y=0.95;
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55), new THREE.MeshStandardMaterial({color:0xe7c29f})); head.position.y=1.8;
+      g.add(body, head); g.userData.name = name;
+      scene.add(g); remotes.set(id,g); return g;
     }
 
-    function applyRemoteState(fromId, state){
-      if(!state) return;
-      const m = ensureRemote(fromId);
-      if(typeof state.x==='number') m.position.x = state.x;
-      if(typeof state.y==='number') m.position.y = state.y - 1.6;
-      if(typeof state.z==='number') m.position.z = state.z;
-      if(typeof state.yaw==='number') m.rotation.y = state.yaw;
+    function applyNpcHit(id, killer=''){
+      const npc = npcById.get(id); if(!npc || npc.userData.dead) return;
+      npc.userData.hp -= 1; npc.position.y = 0.12; setTimeout(()=>{ if(!npc.userData.dead) npc.position.y=0; }, 80);
+      spawnHitFx(npc.position.clone().add(new THREE.Vector3(0,1.3,0)));
+      if(npc.userData.hp <= 0){
+        npc.userData.dead = true; npc.visible = false; updateAlive();
+        if(killer===nick){ score += 100; scoreEl.textContent = score; }
+      }
     }
 
     function wireConn(conn){
-      allConns.push(conn);
+      conns.push(conn);
       conn.on('data', (msg)=>{
-        if(msg?.type==='state'){
-          applyRemoteState(conn.peer, msg.state);
-          if(isHost){
-            for(const c of allConns){ if(c!==conn && c.open) c.send({type:'state', from: conn.peer, state: msg.state}); }
-          }
-        }
+        if(msg?.type==='join'){ ensureRemote(conn.peer, msg.nick || 'guest'); if(isHost) sendAll({type:'join', from:conn.peer, nick:msg.nick||'guest'}, conn); }
+        if(msg?.type==='state'){ const m=ensureRemote(conn.peer); m.position.set(msg.s.x, msg.s.y-1.6, msg.s.z); m.rotation.y = msg.s.yaw; if(isHost) sendAll({type:'state', from:conn.peer, s:msg.s}, conn); }
+        if(msg?.type==='hitNpc'){ applyNpcHit(msg.id, msg.by); if(isHost) sendAll(msg, conn); }
+        if(msg?.type==='chat'){ logChat(`${msg.nick}: ${msg.text}`); if(isHost) sendAll(msg, conn); }
       });
-      conn.on('close', ()=> removeRemote(conn.peer));
-      conn.on('error', ()=> removeRemote(conn.peer));
+      conn.on('close', ()=>{ const m=remotes.get(conn.peer); if(m){scene.remove(m); remotes.delete(conn.peer);} });
     }
 
     function startClient(){
-      isHost = false;
-      peer = new Peer();
+      isHost = false; peer = new Peer();
       peer.on('open', ()=>{
-        const conn = peer.connect(hostId, {reliable:false});
-        conn.on('open', ()=>{ setNetState('참가 완료'); wireConn(conn); });
-        conn.on('error', ()=> setNetState('호스트 연결 실패'));
+        const c = peer.connect(hostId, {reliable:false});
+        c.on('open', ()=>{ netState('참가 완료'); wireConn(c); c.send({type:'join', nick}); });
       });
-      peer.on('error', ()=> setNetState('연결 오류'));
+      peer.on('error', ()=> netState('연결 오류'));
     }
 
-    function initMultiplayer(){
-      isHost = true;
-      peer = new Peer(hostId);
-      peer.on('open', ()=> setNetState('호스트 온라인'));
-      peer.on('connection', (conn)=> wireConn(conn));
-      peer.on('error', (err)=>{
-        if(String(err?.type||'').includes('unavailable-id')) {
-          setNetState('룸 참가 중...');
-          try { peer.destroy(); } catch {}
-          startClient();
-        } else {
-          setNetState('연결 오류');
-        }
-      });
+    function initNet(){
+      isHost = true; peer = new Peer(hostId);
+      peer.on('open', ()=> netState('호스트 온라인'));
+      peer.on('connection', (c)=> wireConn(c));
+      peer.on('error', (e)=>{ if(String(e?.type||'').includes('unavailable-id')){ try{peer.destroy();}catch{} netState('룸 참가 중...'); startClient(); } else netState('연결 오류'); });
     }
-    initMultiplayer();
+    initNet();
 
-    // Camera look
-    let yaw = 0, pitch = 0;
-    function applyLook(){
-      player.rotation.y = yaw;
-      camera.rotation.x = pitch;
-    }
-    document.addEventListener('mousemove', (e)=>{
-      if (!controlEnabled || document.pointerLockElement !== document.body) return;
-      yaw -= e.movementX * 0.0024;
-      pitch -= e.movementY * 0.0024;
-      pitch = Math.max(-1.3, Math.min(1.3, pitch));
-      applyLook();
+    chatInput.addEventListener('keydown', (e)=>{
+      if(e.key!=='Enter') return;
+      const text = chatInput.value.trim(); if(!text) return;
+      chatInput.value='';
+      const msg = {type:'chat', nick, text};
+      logChat(`${nick}: ${text}`);
+      sendAll(msg);
     });
 
-    // Movement inputs
-    const move = {f:false,b:false,l:false,r:false,run:false,jump:false};
-    const vel = new THREE.Vector3();
-    let canJump = false;
-    const onKey=(d,e)=>{
-      switch(e.code){
-        case 'KeyW': move.f=d; break; case 'KeyS': move.b=d; break;
-        case 'KeyA': move.l=d; break; case 'KeyD': move.r=d; break;
-        case 'ShiftLeft': move.run=d; break;
-        case 'Space': if(d) move.jump=true; break;
-      }
-    };
-    addEventListener('keydown',e=>onKey(true,e));
-    addEventListener('keyup',e=>onKey(false,e));
+    let yaw=0, pitch=0;
+    function applyLook(){ player.rotation.y = yaw; camera.rotation.x = pitch; }
+    document.addEventListener('mousemove', (e)=>{ if(!controlEnabled || document.pointerLockElement!==document.body) return; yaw -= e.movementX*0.0024; pitch -= e.movementY*0.0024; pitch=Math.max(-1.3,Math.min(1.3,pitch)); applyLook(); });
 
-    function clampPlayer(p){ p.x = Math.max(-38, Math.min(38,p.x)); p.z = Math.max(-38, Math.min(38,p.z)); }
+    const move = {f:false,b:false,l:false,r:false,run:false,jump:false};
+    const vel = new THREE.Vector3(); let canJump=false;
+    const onKey=(d,e)=>{ if(e.code==='KeyW')move.f=d; if(e.code==='KeyS')move.b=d; if(e.code==='KeyA')move.l=d; if(e.code==='KeyD')move.r=d; if(e.code==='ShiftLeft')move.run=d; if(e.code==='Space'&&d)move.jump=true; };
+    addEventListener('keydown',e=>onKey(true,e)); addEventListener('keyup',e=>onKey(false,e));
+
+    function clampPlayer(p){ p.x=Math.max(-38,Math.min(38,p.x)); p.z=Math.max(-38,Math.min(38,p.z)); }
 
     function hitNPC(){
+      punchT = 0.14;
       raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
-      const aliveNPCs = npcs.filter(n=>!n.userData.dead);
-      const hits = raycaster.intersectObjects(aliveNPCs, true);
-      if(!hits.length) return;
-      const targetRoot = hits[0].object.parent;
-      if(hits[0].distance > 4) return;
-      targetRoot.userData.hp -= 1;
-      targetRoot.position.y = 0.12;
-      setTimeout(()=>{ if(!targetRoot.userData.dead) targetRoot.position.y = 0; }, 80);
-      if(targetRoot.userData.hp <= 0){
-        targetRoot.userData.dead = true;
-        targetRoot.visible = false;
-        score += 100;
-        scoreEl.textContent = score;
-        updateAlive();
-      }
+      const alive = npcs.filter(n=>!n.userData.dead);
+      const hits = raycaster.intersectObjects(alive, true);
+      if(!hits.length || hits[0].distance>4) return;
+      const target = hits[0].object.parent;
+      applyNpcHit(target.userData.id, nick);
+      sendAll({type:'hitNpc', id:target.userData.id, by:nick});
     }
 
-    addEventListener('mousedown', (e)=>{
-      if(!controlEnabled || document.pointerLockElement !== document.body) return;
-      if(e.button===0) hitNPC();
-    });
+    addEventListener('mousedown', (e)=>{ if(!controlEnabled || document.pointerLockElement!==document.body) return; if(e.button===0) hitNPC(); });
     document.getElementById('hitBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); if(controlEnabled) hitNPC(); }, {passive:false});
     document.getElementById('jumpBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); if(controlEnabled) move.jump=true; }, {passive:false});
 
-    // Mobile joystick + look
-    const stickBase = document.getElementById('stickBase');
-    const stickKnob = document.getElementById('stickKnob');
-    let stickId = null, lookId = null;
-    let joyX = 0, joyY = 0;
-    let prevLookX = 0, prevLookY = 0;
-
+    // mobile touch
+    const stickBase = document.getElementById('stickBase'); const stickKnob = document.getElementById('stickKnob');
+    let stickId=null, lookId=null, joyX=0, joyY=0, prevLookX=0, prevLookY=0;
     function resetStick(){ joyX=0; joyY=0; stickKnob.style.left='40px'; stickKnob.style.top='40px'; }
+    addEventListener('touchstart',(e)=>{ if(!controlEnabled) return; for(const t of e.changedTouches){ const x=t.clientX,y=t.clientY; if(stickId===null && x<innerWidth*0.45 && y>innerHeight*0.45){ stickId=t.identifier; const r=stickBase.getBoundingClientRect(); const cx=r.left+r.width/2, cy=r.top+r.height/2; joyX=(x-cx)/45; joyY=(y-cy)/45; } else if(lookId===null){ lookId=t.identifier; prevLookX=x; prevLookY=y; } } }, {passive:false});
+    addEventListener('touchmove',(e)=>{ if(!controlEnabled) return; for(const t of e.changedTouches){ if(t.identifier===stickId){ const r=stickBase.getBoundingClientRect(); const cx=r.left+r.width/2, cy=r.top+r.height/2; let dx=t.clientX-cx, dy=t.clientY-cy; const len=Math.hypot(dx,dy), max=40; if(len>max){ dx=dx/len*max; dy=dy/len*max; } joyX=dx/max; joyY=dy/max; stickKnob.style.left=`${40+dx}px`; stickKnob.style.top=`${40+dy}px`; } else if(t.identifier===lookId){ const dx=t.clientX-prevLookX, dy=t.clientY-prevLookY; prevLookX=t.clientX; prevLookY=t.clientY; yaw-=dx*0.004; pitch-=dy*0.004; pitch=Math.max(-1.3,Math.min(1.3,pitch)); applyLook(); } } e.preventDefault(); }, {passive:false});
+    addEventListener('touchend',(e)=>{ for(const t of e.changedTouches){ if(t.identifier===stickId){stickId=null; resetStick();} if(t.identifier===lookId) lookId=null; } });
 
-    addEventListener('touchstart', (e)=>{
-      if(!controlEnabled) return;
-      for(const t of e.changedTouches){
-        const x=t.clientX, y=t.clientY;
-        if(stickId===null && x < innerWidth*0.45 && y > innerHeight*0.45){
-          stickId = t.identifier;
-          const r = stickBase.getBoundingClientRect();
-          const cx = r.left + r.width/2, cy = r.top + r.height/2;
-          joyX = (x-cx)/45; joyY = (y-cy)/45;
-        } else if(lookId===null){
-          lookId = t.identifier; prevLookX=x; prevLookY=y;
-        }
-      }
-    }, {passive:false});
+    function avoidWallsOrTurn(n){ if(Math.abs(n.position.x)>36||Math.abs(n.position.z)>36) n.userData.dir.multiplyScalar(-1); if(Math.random()<0.008) n.userData.dir.set(Math.random()*2-1,0,Math.random()*2-1).normalize(); }
 
-    addEventListener('touchmove', (e)=>{
-      if(!controlEnabled) return;
-      for(const t of e.changedTouches){
-        if(t.identifier===stickId){
-          const r = stickBase.getBoundingClientRect();
-          const cx = r.left + r.width/2, cy = r.top + r.height/2;
-          let dx = t.clientX-cx, dy = t.clientY-cy;
-          const len = Math.hypot(dx,dy), max=40;
-          if(len>max){ dx = dx/len*max; dy = dy/len*max; }
-          joyX = dx/max; joyY = dy/max;
-          stickKnob.style.left = `${40 + dx}px`;
-          stickKnob.style.top = `${40 + dy}px`;
-        } else if(t.identifier===lookId){
-          const dx = t.clientX - prevLookX;
-          const dy = t.clientY - prevLookY;
-          prevLookX = t.clientX; prevLookY = t.clientY;
-          yaw -= dx * 0.004;
-          pitch -= dy * 0.004;
-          pitch = Math.max(-1.3, Math.min(1.3, pitch));
-          applyLook();
-        }
-      }
-      e.preventDefault();
-    }, {passive:false});
-
-    addEventListener('touchend', (e)=>{
-      for(const t of e.changedTouches){
-        if(t.identifier===stickId){ stickId=null; resetStick(); }
-        if(t.identifier===lookId){ lookId=null; }
-      }
-    });
-
-    function avoidWallsOrTurn(n){
-      if(Math.abs(n.position.x) > 36 || Math.abs(n.position.z) > 36) n.userData.dir.multiplyScalar(-1);
-      if(Math.random() < 0.008) n.userData.dir.set(Math.random()*2-1,0,Math.random()*2-1).normalize();
-    }
-
-    let prev = performance.now();
-    let netTick = 0;
+    let prev = performance.now(), netTick = 0;
     function animate(){
       requestAnimationFrame(animate);
-      const now = performance.now();
-      const dt = Math.min((now-prev)/1000, 0.05);
-      prev = now;
+      const now=performance.now(), dt=Math.min((now-prev)/1000,0.05); prev=now;
 
       if(controlEnabled){
-        const speed = (move.run ? 9.3 : 6.1);
-        let sx = (move.r?1:0) - (move.l?1:0);
-        let sz = (move.f?1:0) - (move.b?1:0);
-        if (isTouch) {
-          sx += joyX;
-          sz += -joyY;
-        }
-        const mag = Math.hypot(sx,sz) || 1;
-        sx /= mag; sz /= mag;
-
+        const speed = (move.run?9.3:6.1);
+        let sx=(move.r?1:0)-(move.l?1:0), sz=(move.f?1:0)-(move.b?1:0);
+        if(isTouch){ sx+=joyX; sz+=-joyY; }
+        const mag=Math.hypot(sx,sz)||1; sx/=mag; sz/=mag;
         const forward = new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
         const right = new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
-        const moveVec = new THREE.Vector3();
-        moveVec.addScaledVector(forward, sz * speed * dt);
-        moveVec.addScaledVector(right, sx * speed * dt);
-        player.position.add(moveVec);
+        player.position.addScaledVector(forward, sz*speed*dt);
+        player.position.addScaledVector(right, sx*speed*dt);
 
-        vel.y -= 18 * dt;
-        if (move.jump && canJump) { vel.y = 7.2; canJump = false; }
-        move.jump = false;
-        player.position.y += vel.y * dt;
-        if(player.position.y < 1.6){ player.position.y = 1.6; vel.y = 0; canJump = true; }
+        vel.y -= 18*dt;
+        if(move.jump&&canJump){ vel.y=7.2; canJump=false; }
+        move.jump=false;
+        player.position.y += vel.y*dt;
+        if(player.position.y<1.6){ player.position.y=1.6; vel.y=0; canJump=true; }
         clampPlayer(player.position);
       }
 
-      for(const n of npcs){
-        if(n.userData.dead) continue;
-        n.userData.turnTimer -= dt;
-        if(n.userData.turnTimer <= 0){
-          n.userData.turnTimer = 0.6 + Math.random()*2.5;
-          n.userData.dir.set(Math.random()*2-1,0,Math.random()*2-1).normalize();
-        }
-        n.position.addScaledVector(n.userData.dir, n.userData.speed*dt);
-        avoidWallsOrTurn(n);
-        n.rotation.y = Math.atan2(n.userData.dir.x, n.userData.dir.z);
-      }
+      // hand animation
+      if(punchT>0){ punchT -= dt; const k = Math.max(0, punchT/0.14); handRoot.position.x = 0.46 + (1-k)*0.18; handRoot.position.y = -0.42 - (1-k)*0.12; handRoot.rotation.z = -(1-k)*0.9; }
+      else { handRoot.position.x += (0.46-handRoot.position.x)*0.22; handRoot.position.y += (-0.42-handRoot.position.y)*0.22; handRoot.rotation.z += (0-handRoot.rotation.z)*0.22; }
+
+      for(const n of npcs){ if(n.userData.dead) continue; n.userData.turnTimer-=dt; if(n.userData.turnTimer<=0){ n.userData.turnTimer=0.6+Math.random()*2.5; n.userData.dir.set(Math.random()*2-1,0,Math.random()*2-1).normalize(); } n.position.addScaledVector(n.userData.dir,n.userData.speed*dt); avoidWallsOrTurn(n); n.rotation.y=Math.atan2(n.userData.dir.x,n.userData.dir.z); }
+
+      for(let i=hitFx.length-1;i>=0;i--){ const p=hitFx[i]; p.userData.life -= dt; p.position.addScaledVector(p.userData.v, dt); p.userData.v.y -= 6*dt; p.scale.setScalar(Math.max(0.01,p.userData.life*2)); if(p.userData.life<=0){ scene.remove(p); hitFx.splice(i,1);} }
 
       netTick += dt;
-      if(netTick > 0.06){
-        netTick = 0;
-        const state = { x: player.position.x, y: player.position.y, z: player.position.z, yaw };
-        for(const c of allConns){ if(c.open) c.send({type:'state', state}); }
-      }
+      if(netTick>0.06){ netTick=0; sendAll({type:'state', s:{x:player.position.x,y:player.position.y,z:player.position.z,yaw}, nick}); }
 
       renderer.render(scene,camera);
     }
     animate();
 
-    addEventListener('resize', ()=>{
-      camera.aspect = innerWidth/innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(innerWidth, innerHeight);
-    });
+    addEventListener('resize', ()=>{ camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
   </script>
 </body>
 </html>
