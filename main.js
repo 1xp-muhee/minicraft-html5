@@ -353,7 +353,8 @@ import { createProjectileMesh } from './projectiles.js';
       if(keyboard) g.add(keyboard);
       g.position.set(x,0,z);
       const seatIndex = Number.isInteger(opts.seatIndex) ? opts.seatIndex : -1;
-      const seat = opts.seat || (seatIndex>=0 ? deskSeats[seatIndex] : null) || deskSeats[Math.floor(Math.random()*deskSeats.length)] || {x, z};
+      const seat = opts.seat || (seatIndex>=0 ? deskSeats[seatIndex] : null) || deskSeats[Math.floor(Math.random()*deskSeats.length)];
+      if(!seat) return null;
       if(seatIndex >= 0) seatOwner.set(seatIndex, id);
       const baseSpeed = 0.9+Math.random()*0.8;
       g.userData = {
@@ -380,6 +381,7 @@ import { createProjectileMesh } from './projectiles.js';
         moveTimer: 0
       };
       npcGroup.add(g); npcs.push(g);
+      return g;
     }
 
     const scoreEl = document.getElementById('score');
@@ -457,13 +459,14 @@ import { createProjectileMesh } from './projectiles.js';
     }
 
     let npcSeq = 0;
-    const initialCount = 50;
+    const initialCount = Math.min(50, deskSeats.length);
     for(let i=0;i<initialCount;i++){
       const si = findFreeSeatIndex();
-      const seat = (si>=0 ? deskSeats[si] : null) || {x:(Math.random()*60)-30, z:(Math.random()*60)-30};
+      if(si < 0) break;
+      const seat = deskSeats[si];
       const id=`n${npcSeq++}`;
-      makeNPC(seat.x + (Math.random()-0.5)*0.4, seat.z + (Math.random()-0.5)*0.4, id, { seat, seatIndex:si, seated:true, entering:false });
-      npcById.set(id,npcs[npcs.length-1]);
+      const npc = makeNPC(seat.x + (Math.random()-0.5)*0.4, seat.z + (Math.random()-0.5)*0.4, id, { seat, seatIndex:si, seated:true, entering:false });
+      if(npc) npcById.set(id, npc);
     }
     updateAlive();
     updateChiUI();
@@ -472,13 +475,15 @@ import { createProjectileMesh } from './projectiles.js';
 
     function spawnFromRandomDoor(){
       if(!deskSeats.length) return;
+      const aliveWorkers = npcs.filter(n => !n.userData.dead).length;
+      if(aliveWorkers >= deskSeats.length) return; // stop regen when workers already exceed/meet desk count
       const si = findFreeSeatIndex();
       if(si < 0) return; // no empty seat
       const door = doorSpawns[Math.floor(Math.random()*doorSpawns.length)];
       const seat = deskSeats[si];
       const id = `n${npcSeq++}`;
-      makeNPC(door.x, door.z, id, { seat, seatIndex:si, seated:false, entering:true });
-      npcById.set(id, npcs[npcs.length-1]);
+      const npc = makeNPC(door.x, door.z, id, { seat, seatIndex:si, seated:false, entering:true });
+      if(npc) npcById.set(id, npc);
       updateAlive();
     }
 
