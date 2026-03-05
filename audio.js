@@ -29,7 +29,7 @@ export function createAmbientBgmStarter() {
       started = true;
 
       const master = ac.createGain();
-      master.gain.value = 0.22;
+      master.gain.value = 0.46;
       master.connect(ac.destination);
 
       const notes = [220.0, 246.94, 261.63, 293.66, 329.63, 293.66, 261.63, 246.94];
