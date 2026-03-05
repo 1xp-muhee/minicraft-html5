@@ -22,6 +22,12 @@ export function createProjectileMesh(THREE, weaponKey, ult) {
     );
     mesh.rotation.x = Math.PI / 2;
     speed = ult ? 55 : 34;
+  } else if (weaponKey === 'galaxy26') {
+    mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(ult ? 0.2 : 0.11, 14, 14),
+      new THREE.MeshStandardMaterial({ color: 0xc4b5fd, emissive: 0x7c3aed, emissiveIntensity: ult ? 2.8 : 1.2 })
+    );
+    speed = ult ? 62 : 40;
   } else {
     mesh = new THREE.Mesh(
       new THREE.SphereGeometry(ult ? 0.14 : 0.06, 10, 10),

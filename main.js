@@ -237,6 +237,18 @@ import { createProjectileMesh } from './projectiles.js';
         const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.01,0.01,0.26,8), mat); barrel.rotation.x=Math.PI/2; barrel.position.z=-0.45;
         const stock = new THREE.Mesh(new THREE.BoxGeometry(0.07,0.09,0.2), mat); stock.position.set(0,-0.03,0.04);
         weaponRoot.add(body, barrel, stock);
+      } else if(localWeapon.key==='galaxy26'){
+        const phone = new THREE.Mesh(new THREE.BoxGeometry(0.12,0.22,0.02), mat); phone.position.set(0.03,0.01,-0.22); phone.rotation.y = -0.2;
+        const cameraRing1 = new THREE.Mesh(new THREE.CylinderGeometry(0.018,0.018,0.01,14), new THREE.MeshStandardMaterial({color:0x111827}));
+        const cameraRing2 = new THREE.Mesh(new THREE.CylinderGeometry(0.018,0.018,0.01,14), new THREE.MeshStandardMaterial({color:0x111827}));
+        const cameraRing3 = new THREE.Mesh(new THREE.CylinderGeometry(0.018,0.018,0.01,14), new THREE.MeshStandardMaterial({color:0x111827}));
+        cameraRing1.position.set(0.06,0.07,-0.205);
+        cameraRing2.position.set(0.02,0.03,-0.205);
+        cameraRing3.position.set(0.06,-0.01,-0.205);
+        cameraRing1.rotation.x = cameraRing2.rotation.x = cameraRing3.rotation.x = Math.PI/2;
+        const flash = new THREE.Mesh(new THREE.SphereGeometry(0.01,10,10), new THREE.MeshStandardMaterial({color:0xfef08a, emissive:0xfde047, emissiveIntensity:0.8}));
+        flash.position.set(0.02,-0.03,-0.205);
+        weaponRoot.add(phone, cameraRing1, cameraRing2, cameraRing3, flash);
       } else {
         const bow = new THREE.Mesh(new THREE.TorusGeometry(0.12,0.01,6,18,Math.PI), mat); bow.rotation.y=Math.PI/2; bow.position.z=-0.12;
         const body = new THREE.Mesh(new THREE.BoxGeometry(0.04,0.05,0.35), mat); body.position.z=-0.18;
@@ -809,18 +821,40 @@ import { createProjectileMesh } from './projectiles.js';
       spells.push(mesh);
     }
 
-    function castSpell(){
+    function castSpell(overrideDir = null){
       punchT = 0.16;
       const ult = ultimateArmed;
-      const d = new THREE.Vector3();
+      const d = overrideDir ? overrideDir.clone().normalize() : new THREE.Vector3();
       const p = new THREE.Vector3();
-      camera.getWorldDirection(d);
+      if(!overrideDir) camera.getWorldDirection(d);
       camera.getWorldPosition(p);
 
       spawnProjectile(p, d, localWeapon.key, ult, false);
       sendAll({type:'cast', from: peer?.id || nick, p:{x:p.x,y:p.y,z:p.z}, d:{x:d.x,y:d.y,z:d.z}, weapon: localWeapon.key, ult});
 
       if(ult){ ultimateArmed = false; ultimateReady = false; chiHits = 0; updateChiUI(); }
+    }
+
+    function getGalaxyAutoAimDir(){
+      const from = new THREE.Vector3();
+      camera.getWorldPosition(from);
+      const forward = new THREE.Vector3();
+      camera.getWorldDirection(forward);
+      let best = null;
+      let bestDist = 9999;
+
+      for(const n of npcs){
+        if(!n || n.userData?.dead) continue;
+        const target = n.position.clone().add(new THREE.Vector3(0,1.2,0));
+        const dir = target.clone().sub(from);
+        const dist = dir.length();
+        if(dist > 38) continue;
+        const dot = dir.clone().normalize().dot(forward);
+        if(dot < 0.72) continue;
+        if(dist < bestDist){ bestDist = dist; best = dir; }
+      }
+
+      return best ? best.normalize() : forward;
     }
 
     addEventListener('mousedown', (e)=>{ if(!controlEnabled || document.pointerLockElement!==document.body) return; if(e.button===0) castSpell(); });
@@ -851,6 +885,7 @@ import { createProjectileMesh } from './projectiles.js';
     function avoidWallsOrTurn(n){ if(Math.abs(n.position.x)>36||Math.abs(n.position.z)>36) n.userData.dir.multiplyScalar(-1); if(Math.random()<0.008) n.userData.dir.set(Math.random()*2-1,0,Math.random()*2-1).normalize(); }
 
     let prev = performance.now(), netTick = 0;
+    let galaxyAutoFireCd = 0;
     function animate(){
       requestAnimationFrame(animate);
       const now=performance.now(), dt=Math.min((now-prev)/1000,0.05); prev=now;
@@ -872,6 +907,14 @@ import { createProjectileMesh } from './projectiles.js';
         const supportY = supportHeightAt(player.position.x, player.position.z, player.position.y);
         if(player.position.y < supportY){ player.position.y = supportY; vel.y = 0; canJump = true; }
         clampPlayer(player.position);
+
+        if(localWeapon.key === 'galaxy26'){
+          galaxyAutoFireCd -= dt;
+          if(galaxyAutoFireCd <= 0){
+            castSpell(getGalaxyAutoAimDir());
+            galaxyAutoFireCd = 0.22;
+          }
+        }
       }
 
       // hand + slingshot animation (forward-facing)
