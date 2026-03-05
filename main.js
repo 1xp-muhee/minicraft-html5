@@ -824,9 +824,16 @@ import { createProjectileMesh } from './projectiles.js';
     function castSpell(overrideDir = null){
       punchT = 0.16;
       const ult = ultimateArmed;
-      const d = overrideDir ? overrideDir.clone().normalize() : new THREE.Vector3();
+      let d;
+      if(overrideDir){
+        d = overrideDir.clone().normalize();
+      } else if(localWeapon.key === 'galaxy26'){
+        d = getGalaxyAutoAimDir();
+      } else {
+        d = new THREE.Vector3();
+        camera.getWorldDirection(d);
+      }
       const p = new THREE.Vector3();
-      if(!overrideDir) camera.getWorldDirection(d);
       camera.getWorldPosition(p);
 
       spawnProjectile(p, d, localWeapon.key, ult, false);
@@ -885,7 +892,6 @@ import { createProjectileMesh } from './projectiles.js';
     function avoidWallsOrTurn(n){ if(Math.abs(n.position.x)>36||Math.abs(n.position.z)>36) n.userData.dir.multiplyScalar(-1); if(Math.random()<0.008) n.userData.dir.set(Math.random()*2-1,0,Math.random()*2-1).normalize(); }
 
     let prev = performance.now(), netTick = 0;
-    let galaxyAutoFireCd = 0;
     function animate(){
       requestAnimationFrame(animate);
       const now=performance.now(), dt=Math.min((now-prev)/1000,0.05); prev=now;
@@ -907,14 +913,6 @@ import { createProjectileMesh } from './projectiles.js';
         const supportY = supportHeightAt(player.position.x, player.position.z, player.position.y);
         if(player.position.y < supportY){ player.position.y = supportY; vel.y = 0; canJump = true; }
         clampPlayer(player.position);
-
-        if(localWeapon.key === 'galaxy26'){
-          galaxyAutoFireCd -= dt;
-          if(galaxyAutoFireCd <= 0){
-            castSpell(getGalaxyAutoAimDir());
-            galaxyAutoFireCd = 0.22;
-          }
-        }
       }
 
       // hand + slingshot animation (forward-facing)
