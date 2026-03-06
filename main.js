@@ -8,6 +8,8 @@ import { createProjectileMesh } from './projectiles.js';
     const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
     const roomId = new URLSearchParams(location.search).get('room') || 'office-1';
     const nick = resolveNickname();
+    const savedSens = parseFloat(localStorage.getItem('officecraft_look_sens') || '1.0');
+    let lookSensitivity = Number.isFinite(savedSens) ? Math.min(2.4, Math.max(0.4, savedSens)) : 1.0;
 
     async function resolveTeamSelection(){
       return new Promise((resolve)=>{
@@ -87,6 +89,19 @@ import { createProjectileMesh } from './projectiles.js';
       const leaderboard = document.getElementById('leaderboard');
       if (leaderboard) leaderboard.style.pointerEvents = 'none';
     }
+
+    const sensSlider = document.getElementById('sensSlider');
+    const sensVal = document.getElementById('sensVal');
+    function renderSensitivity(){
+      if(sensSlider) sensSlider.value = String(lookSensitivity.toFixed(1));
+      if(sensVal) sensVal.textContent = `${lookSensitivity.toFixed(1)}x`;
+    }
+    renderSensitivity();
+    sensSlider?.addEventListener('input', ()=>{
+      lookSensitivity = Math.min(2.4, Math.max(0.4, parseFloat(sensSlider.value) || 1.0));
+      localStorage.setItem('officecraft_look_sens', String(lookSensitivity));
+      renderSensitivity();
+    });
 
     const floor = new THREE.Mesh(new THREE.BoxGeometry(80,1,80), new THREE.MeshStandardMaterial({color:0xbfc7d1}));
     floor.position.y = -0.5; floor.receiveShadow = true; scene.add(floor);
@@ -734,7 +749,7 @@ import { createProjectileMesh } from './projectiles.js';
     initNet();
     let yaw=0, pitch=0;
     function applyLook(){ player.rotation.y = yaw; camera.rotation.x = pitch; }
-    document.addEventListener('mousemove', (e)=>{ if(!controlEnabled || document.pointerLockElement!==document.body) return; yaw -= e.movementX*0.0024; pitch -= e.movementY*0.0024; pitch=Math.max(-1.3,Math.min(1.3,pitch)); applyLook(); });
+    document.addEventListener('mousemove', (e)=>{ if(!controlEnabled || document.pointerLockElement!==document.body) return; yaw -= e.movementX*0.0024*lookSensitivity; pitch -= e.movementY*0.0024*lookSensitivity; pitch=Math.max(-1.3,Math.min(1.3,pitch)); applyLook(); });
 
     const move = {f:false,b:false,l:false,r:false,run:false,jump:false};
     const vel = new THREE.Vector3(); let canJump=false;
@@ -936,7 +951,7 @@ import { createProjectileMesh } from './projectiles.js';
     let stickId=null, lookId=null, joyX=0, joyY=0, prevLookX=0, prevLookY=0;
     function resetStick(){ joyX=0; joyY=0; stickKnob.style.left='40px'; stickKnob.style.top='40px'; }
     addEventListener('touchstart',(e)=>{ if(!controlEnabled) return; for(const t of e.changedTouches){ const x=t.clientX,y=t.clientY; if(stickId===null && x<innerWidth*0.45 && y>innerHeight*0.45){ stickId=t.identifier; const r=stickBase.getBoundingClientRect(); const cx=r.left+r.width/2, cy=r.top+r.height/2; joyX=(x-cx)/45; joyY=(y-cy)/45; } else if(lookId===null){ lookId=t.identifier; prevLookX=x; prevLookY=y; } } }, {passive:false});
-    addEventListener('touchmove',(e)=>{ if(!controlEnabled) return; for(const t of e.changedTouches){ if(t.identifier===stickId){ const r=stickBase.getBoundingClientRect(); const cx=r.left+r.width/2, cy=r.top+r.height/2; let dx=t.clientX-cx, dy=t.clientY-cy; const len=Math.hypot(dx,dy), max=40; if(len>max){ dx=dx/len*max; dy=dy/len*max; } joyX=dx/max; joyY=dy/max; stickKnob.style.left=`${40+dx}px`; stickKnob.style.top=`${40+dy}px`; } else if(t.identifier===lookId){ const dx=t.clientX-prevLookX, dy=t.clientY-prevLookY; prevLookX=t.clientX; prevLookY=t.clientY; yaw-=dx*0.004; pitch-=dy*0.004; pitch=Math.max(-1.3,Math.min(1.3,pitch)); applyLook(); } } e.preventDefault(); }, {passive:false});
+    addEventListener('touchmove',(e)=>{ if(!controlEnabled) return; for(const t of e.changedTouches){ if(t.identifier===stickId){ const r=stickBase.getBoundingClientRect(); const cx=r.left+r.width/2, cy=r.top+r.height/2; let dx=t.clientX-cx, dy=t.clientY-cy; const len=Math.hypot(dx,dy), max=40; if(len>max){ dx=dx/len*max; dy=dy/len*max; } joyX=dx/max; joyY=dy/max; stickKnob.style.left=`${40+dx}px`; stickKnob.style.top=`${40+dy}px`; } else if(t.identifier===lookId){ const dx=t.clientX-prevLookX, dy=t.clientY-prevLookY; prevLookX=t.clientX; prevLookY=t.clientY; yaw-=dx*0.004*lookSensitivity; pitch-=dy*0.004*lookSensitivity; pitch=Math.max(-1.3,Math.min(1.3,pitch)); applyLook(); } } e.preventDefault(); }, {passive:false});
     addEventListener('touchend',(e)=>{ for(const t of e.changedTouches){ if(t.identifier===stickId){stickId=null; resetStick();} if(t.identifier===lookId) lookId=null; } });
 
     function avoidWallsOrTurn(n){ if(Math.abs(n.position.x)>36||Math.abs(n.position.z)>36) n.userData.dir.multiplyScalar(-1); if(Math.random()<0.008) n.userData.dir.set(Math.random()*2-1,0,Math.random()*2-1).normalize(); }

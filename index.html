@@ -35,6 +35,11 @@
     <div>무기: <span id="weaponName">-</span> | 사거리: <span id="weaponRange">-</span> | 고용: E(300점)</div>
     <div>기력: <span id="chiState">0/10</span> <span id="ultReady" style="display:none;color:#ffe08a;font-weight:700">⚡ 필살기 준비!</span></div>
     <div>멀티룸: <span id="roomId"></span> (<span id="netState">오프라인</span>)</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+      <span>감도:</span>
+      <input id="sensSlider" type="range" min="0.4" max="2.4" step="0.1" value="1.0" style="width:110px" />
+      <span id="sensVal">1.0x</span>
+    </div>
   </div>
   <div id="cross">+</div>
   <div id="start"><button id="startBtn">클릭해서 시작</button></div>
