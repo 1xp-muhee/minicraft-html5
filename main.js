@@ -662,6 +662,7 @@ import { createProjectileMesh } from './projectiles.js';
           if(msg.targetNick === nick){
             playerHp = Math.max(0, playerHp - (msg.damage || 10));
             hpEl.textContent = playerHp;
+            spawnHitFx(player.position.clone().add(new THREE.Vector3(0,1.2,0)), 1.2);
 
             // knockback
             let kx = 0, kz = 0;
@@ -751,6 +752,50 @@ import { createProjectileMesh } from './projectiles.js';
     addEventListener('keyup',e=>onKey(false,e));
 
     function clampPlayer(p){ p.x=Math.max(-38,Math.min(38,p.x)); p.z=Math.max(-38,Math.min(38,p.z)); }
+    function resolvePlayerOverlap(minDist = 0.9){
+      const others = [...remotes.values()].filter(r => r && r.position);
+      if(!others.length) return;
+
+      // local vs remote
+      for(const m of others){
+        const dx = m.position.x - player.position.x;
+        const dz = m.position.z - player.position.z;
+        const d2 = dx*dx + dz*dz;
+        if(d2 <= 0.00001) continue;
+        const d = Math.sqrt(d2);
+        if(d < minDist){
+          const push = (minDist - d) * 0.5;
+          const nx = dx / d, nz = dz / d;
+          player.position.x -= nx * push;
+          player.position.z -= nz * push;
+          m.position.x += nx * push;
+          m.position.z += nz * push;
+        }
+      }
+
+      // remote vs remote
+      for(let i=0;i<others.length;i++){
+        for(let j=i+1;j<others.length;j++){
+          const a = others[i], b = others[j];
+          const dx = b.position.x - a.position.x;
+          const dz = b.position.z - a.position.z;
+          const d2 = dx*dx + dz*dz;
+          if(d2 <= 0.00001) continue;
+          const d = Math.sqrt(d2);
+          if(d < minDist){
+            const push = (minDist - d) * 0.5;
+            const nx = dx / d, nz = dz / d;
+            a.position.x -= nx * push;
+            a.position.z -= nz * push;
+            b.position.x += nx * push;
+            b.position.z += nz * push;
+          }
+        }
+      }
+
+      clampPlayer(player.position);
+      for(const m of others) clampPlayer(m.position);
+    }
     function hireNpcGuard(){
       if(score < 300){ showStatus('고용 실패: 점수 부족'); return false; }
       // recruit nearest neutral(yellow) worker (global nearest)
@@ -918,6 +963,7 @@ import { createProjectileMesh } from './projectiles.js';
         const supportY = supportHeightAt(player.position.x, player.position.z, player.position.y);
         if(player.position.y < supportY){ player.position.y = supportY; vel.y = 0; canJump = true; }
         clampPlayer(player.position);
+        resolvePlayerOverlap(0.95);
       }
 
       // hand + slingshot animation (forward-facing)
@@ -977,6 +1023,7 @@ import { createProjectileMesh } from './projectiles.js';
               if(targetNick===nick){
                 playerHp = Math.max(0, playerHp - dmg);
                 hpEl.textContent = playerHp;
+                spawnHitFx(player.position.clone().add(new THREE.Vector3(0,1.2,0)), 1.2);
               } else {
                 sendAll({type:'playerHit', targetNick, damage:dmg, by:'berserk', fromX:n.position.x, fromZ:n.position.z});
               }
@@ -1208,6 +1255,7 @@ import { createProjectileMesh } from './projectiles.js';
               if(m.userData.team === team || m.userData.team === 'unknown') continue;
               const hitPos = m.position.clone().add(new THREE.Vector3(0,1.0,0));
               if(b.position.distanceTo(hitPos) < 0.75){
+                spawnHitFx(hitPos, b.userData.ult ? 1.8 : 1.2);
                 sendAll({type:'playerHit', targetNick: m.userData.name, damage: (b.userData.ult ? 18 : 10), by: nick, fromX: b.position.x, fromZ: b.position.z});
                 hit = true;
                 break;
